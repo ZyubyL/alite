@@ -11,6 +11,9 @@ setup(
             "alite._alite",
             sources=[
                 "src/alite/_core/alite.c",
+                "src/alite/_core/cursor.c",
+                "src/alite/_core/connection.c",
+                "src/alite/_core/pool.c",
             ],
             include_dirs=[python_inc],
             library_dirs=[python_lib],

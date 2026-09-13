@@ -12,25 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""
-Type stubs for alite._alite C extension.
-"""
-
 from __future__ import annotations
 
-class Pool:
-    """
-    SQLite connection pool.
-    """
-    def __init__(self, path: str, pool_size: int = 4) -> None: ...
-    def close(self) -> None: ...
+import asyncio
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any
 
-class Connection:
-    """
-    SQLite database connection.
-    """
 
-class Cursor:
+async def _run_in_thread(
+    executor: ThreadPoolExecutor, fn: Callable[..., Any], *args: Any
+) -> Any:
     """
-    SQLite query cursor.
+    Run a blocking function in the thread pool executor.
     """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(executor, fn, *args)

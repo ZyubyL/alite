@@ -19,7 +19,35 @@ Async SQLite3 library
 from __future__ import annotations
 
 from importlib.metadata import version
+from pathlib import Path
+
+from alite._alite import Pool as _Pool
+from alite.pool import AsyncPool
 
 __version__ = version("alite")
+"""
+See current alite version.
+"""
 
-__all__ = []
+
+def create_pool(database: str | Path, pool_size: int = 4) -> AsyncPool:
+    """
+    Create an async connection pool to an SQLite database.
+
+    Args:
+        database:
+            Path to the SQLite database file, or ':memory:' to run it on memory.
+        pool_size:
+            Maximum number of connections in the pool.
+
+    Examples:
+        ```py
+        async with create_pool("foo/bar.db") as pool:
+            ...
+        # Pool auto closes with async with context manager.
+        ```
+    """
+    return AsyncPool(_Pool(str(database), pool_size))
+
+
+__all__ = ["AsyncPool", "create_pool"]

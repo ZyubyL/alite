@@ -13,6 +13,9 @@
  * limitations under the License.
 **/
 #include "alite.h"
+#include "connection.h"
+#include "cursor.h"
+#include "pool.h"
 
 static PyModuleDef alite_module = {
     PyModuleDef_HEAD_INIT,
@@ -23,9 +26,19 @@ static PyModuleDef alite_module = {
 
 #define ALITE_INIT_MODULE(mod) PyObject *mod = PyModule_Create(&alite_module)
 
+static inline bool init_type(PyObject *mod, PyTypeObject *type, const char *name)
+{
+    return PyType_Ready(type) >= 0 && PyModule_AddObjectRef(mod, name, (PyObject *)type) >= 0;
+}
+
 PyMODINIT_FUNC PyInit__alite(void)
 {
     ALITE_INIT_MODULE(mod);
-    if (!mod) return NULL;
+    if (
+        !mod
+        || !init_type(mod, &PoolType, "Pool")
+        || !init_type(mod, &ConnectionType, "Connection")
+        || !init_type(mod, &CursorType, "Cursor")
+    ) return nullptr;
     return mod;
 }
