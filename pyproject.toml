@@ -1,0 +1,27 @@
+[project]
+name = "alite"
+version = "0.1.0.alpha1"
+description = "Asynchronous SQLite3 library"
+readme = "README.md"
+authors = [
+    { name = "ZyubyL", email = "zyubyl@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = []
+classifiers = [
+    "Development Status :: 1 - Planning",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.10,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "setuptools>=84.0.0",
+]
