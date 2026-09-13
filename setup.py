@@ -10,7 +10,7 @@ if sys.platform == "win32":
     extra_compile_args = ["/std:c17"]
     extra_link_args: list[str] = []
 else:
-    extra_compile_args = ["-flto", "-std=c2x"]
+    extra_compile_args = ["-flto", "-std=c17"]
     extra_link_args = ["-flto"]
 
 setup(

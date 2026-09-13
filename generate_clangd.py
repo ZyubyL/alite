@@ -43,7 +43,7 @@ out.append("CompileFlags:")
 out.append("  Add: [")
 out.append("    -x,")
 out.append("    c,")  # Explicitly set the header to be C, not C++
-out.append("    -std=c2x,")  # This project uses C2X standard
+out.append("    -std=c17,")  # This project uses C2X standard
 out.append(f"    -I{sysconfig.get_path('include')}")  # For Python.h
 out.append("  ]")
 

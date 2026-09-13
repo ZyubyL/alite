@@ -28,12 +28,12 @@ static void Connection_dealloc(ConnectionObject *self)
 static PyObject* Connection_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 {
     ConnectionObject *self = (ConnectionObject *)type->tp_alloc(type, 0);
-    if (self) { self->db = nullptr; }
+    if (self) { self->db = NULL; }
     return (PyObject *)self;
 }
 
 PyTypeObject ConnectionType = {
-    PyVarObject_HEAD_INIT(nullptr, 0)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name      = MODULE_NAME ".Pool",
     .tp_basicsize = sizeof(ConnectionObject),
     .tp_doc       = "SQLite connection",

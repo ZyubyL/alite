@@ -39,6 +39,6 @@ PyMODINIT_FUNC PyInit__alite(void)
         || !init_type(mod, &PoolType, "Pool")
         || !init_type(mod, &ConnectionType, "Connection")
         || !init_type(mod, &CursorType, "Cursor")
-    ) return nullptr;
+    ) return NULL;
     return mod;
 }

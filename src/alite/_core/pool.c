@@ -21,7 +21,7 @@ static i8 Pool_init(PoolObject *self, PyObject *args, PyObject *kwargs)
     const char *path;
     i64 pool_size = ALITE_DEFAULT_POOL_SIZE;
 
-    static char *kwlist[] = { "path", "pool_size", nullptr };
+    static char *kwlist[] = { "path", "pool_size", NULL };
     if (
         !PyArg_ParseTupleAndKeywords(args, kwargs, "s|i", kwlist, &path, &pool_size)
     ) { return -1; }
@@ -42,9 +42,9 @@ nomem:
     PyErr_NoMemory();
 cleanup:
     free(self->connections);
-    self->connections = nullptr;
+    self->connections = NULL;
     free(self->path);
-    self->path = nullptr;
+    self->path = NULL;
     return -1;
 }
 
@@ -59,15 +59,15 @@ static PyObject* Pool_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 {
     PoolObject *self = (PoolObject *)type->tp_alloc(type, 0);
     if (self) {
-        self->connections = nullptr;
+        self->connections = NULL;
         self->pool_size = 0;
-        self->path = nullptr;
+        self->path = NULL;
     }
     return (PyObject *)self;
 }
 
 PyTypeObject PoolType = {
-    PyVarObject_HEAD_INIT(nullptr, 0)
+    PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name      = MODULE_NAME ".Pool",
     .tp_basicsize = sizeof(PoolObject),
     .tp_doc       = "SQLite connection pool",
