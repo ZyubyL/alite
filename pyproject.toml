@@ -1,6 +1,6 @@
 [project]
 name = "alite"
-version = "0.1.0.alpha1"
+version = "0.1.0.alpha2"
 description = "Asynchronous SQLite3 library"
 readme = "README.md"
 authors = [
@@ -18,8 +18,8 @@ classifiers = [
 ]
 
 [build-system]
-requires = ["uv_build>=0.12.10,<0.13.0"]
-build-backend = "uv_build"
+requires = ["setuptools>=84.0.0"]
+build-backend = "setuptools.build_meta"
 
 [dependency-groups]
 dev = [
