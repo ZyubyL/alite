@@ -7,10 +7,10 @@ python_inc = sysconfig.get_path("include")
 python_lib = sysconfig.get_config_var("LIBDIR")
 
 if sys.platform == "win32":
-    extra_compile_args = ["/std:c23"]
+    extra_compile_args = ["/std:c17"]
     extra_link_args: list[str] = []
 else:
-    extra_compile_args = ["-flto", "-std=c23"]
+    extra_compile_args = ["-flto", "-std=c2x"]
     extra_link_args = ["-flto"]
 
 setup(

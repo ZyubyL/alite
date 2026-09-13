@@ -26,7 +26,7 @@ static PyModuleDef alite_module = {
 
 #define ALITE_INIT_MODULE(mod) PyObject *mod = PyModule_Create(&alite_module)
 
-static inline bool init_type(PyObject *mod, PyTypeObject *type, const char *name)
+static inline i8 init_type(PyObject *mod, PyTypeObject *type, const char *name)
 {
     return PyType_Ready(type) >= 0 && PyModule_AddObjectRef(mod, name, (PyObject *)type) >= 0;
 }
