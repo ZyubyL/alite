@@ -1,6 +1,6 @@
 [project]
 name = "alite"
-version = "0.1.0a4"
+version = "0.1.0a5"
 description = "Asynchronous SQLite3 library"
 readme = "README.md"
 authors = [

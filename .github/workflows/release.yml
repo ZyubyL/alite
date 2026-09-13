@@ -21,6 +21,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Fetch sqlite amalgamation (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Invoke-WebRequest -Uri "https://www.sqlite.org/2024/sqlite-amalgamation-3470100.zip" -OutFile sqlite.zip
+          Expand-Archive -Path sqlite.zip -DestinationPath vendor_tmp
+          New-Item -ItemType Directory -Force -Path src/alite/_core/vendor
+          Copy-Item vendor_tmp/sqlite-amalgamation-3470100/sqlite3.h src/alite/_core/vendor/
+          Copy-Item vendor_tmp/sqlite-amalgamation-3470100/sqlite3.c src/alite/_core/vendor/
+
       - name: Build wheels
         uses: pypa/cibuildwheel@v2.22
         env:
