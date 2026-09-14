@@ -15,10 +15,11 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
-from typing import Self
+from typing import Any, Self
 
 from alite._alite import Pool as _Pool
 from alite._threading import _run_in_thread
+from alite.cursor import AsyncCursor
 
 __all__ = ["AsyncPool"]
 
@@ -52,8 +53,7 @@ class AsyncPool:
         if self._closed:
             return
         self._closed = True
-        # TODO: pool.c Pool_close
-        # await _run_in_thread(self._executor, self._pool.close)
+        await _run_in_thread(self._executor, self._pool.close)
         self._executor.shutdown(wait=False)
 
     async def __aenter__(self) -> Self:
@@ -61,3 +61,19 @@ class AsyncPool:
 
     async def __aexit__(self, *exc: object) -> None:
         await self.close()
+
+    def _check_closed(self) -> None:
+        if self._closed:
+            raise RuntimeError("Pool is closed")
+
+    async def execute(
+        self, sql: str, params: tuple[Any, ...] | None = None
+    ) -> AsyncCursor:
+        """
+        Execute SQL and return an AsyncCursor for fetching results.
+        """
+        self._check_closed()
+        cursor = await _run_in_thread(
+            self._executor, self._pool.execute, sql, params or ()
+        )
+        return AsyncCursor(cursor, self._executor)

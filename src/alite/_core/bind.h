@@ -12,27 +12,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 **/
-#ifndef ALITE_CURSOR_H
-#define ALITE_CURSOR_H
+#ifndef ALITE_BIND_H
+#define ALITE_BIND_H
 
 #include "alite.h"
-#include "connection.h"
-
-typedef struct {
-    PyObject_HEAD
-    sqlite3_stmt     *stmt;
-    ConnectionObject *conn;
-    i8                closed;
-    i64               rowcount;
-} CursorObject;
-
-extern PyTypeObject CursorType;
 
 /*
- * Prepare and bind an SQL statement. Increase conn->open_stmts on success.
- * Release GIL during preparation.
- * Return 0 on success, -1 on failure.
+ * Bind single value to statement at index.
+ * Return SQLITE_OK on success, none zero on error + exception.
  */
-extern i8 Cursor_prepare(CursorObject *self, ConnectionObject *conn, const char *sql, PyObject *params);
+extern i8 alite_bind_value(sqlite3_stmt *stmt, i64 index, PyObject *value);
 
-#endif // ALITE_CURSOR_H
+/*
+ * Bind positional params (tuple/list) to statement.
+ * Return SQLITE_OK on success, -1 on error.
+ */
+extern i8 alite_bind_positional(sqlite3_stmt *stmt, PyObject *params);
+
+/*
+ * Bind named params (dict) to statement
+ * Return SQLITE_OK on success, -1 on error.
+ */
+extern i8 alite_bind_named(sqlite3_stmt *stmt, PyObject *params);
+
+#endif // ALITE_BIND_H

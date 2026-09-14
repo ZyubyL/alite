@@ -18,12 +18,18 @@ Type stubs for alite._alite C extension.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+from typing import Any
+
 class Pool:
     """
     SQLite connection pool.
     """
     def __init__(self, path: str, pool_size: int = 4) -> None: ...
     def close(self) -> None: ...
+    def execute(
+        self, sql: str, params: tuple[Any, ...] | Sequence[Any] = ()
+    ) -> Cursor: ...
 
 class Connection:
     """
@@ -34,3 +40,6 @@ class Cursor:
     """
     SQLite query cursor.
     """
+    @property
+    def rowcount(self) -> int: ...
+    def close(self) -> None: ...

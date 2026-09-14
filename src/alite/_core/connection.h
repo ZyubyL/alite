@@ -20,8 +20,24 @@
 typedef struct {
     PyObject_HEAD
     sqlite3 *db;
+    i8       in_use;
+    usize    open_stmts;
 } ConnectionObject;
 
 extern PyTypeObject ConnectionType;
+
+/*
+ * Open the database connection at path.
+ * Enable WAL mode and set busy_timeout to 5000.
+ * Return 0 on success, -1 on failure (self->db remains NULL on failure).
+ */
+extern i8 Connection_open_db(ConnectionObject *self, const char *path);
+
+/*
+ * Close the database. Release GIL during the close call.
+ * Return SQLITE_OK or SQLITE_BUSY.
+ * Set self->db to NULL on success.
+ */
+extern i8 Connection_close_db(ConnectionObject *self);
 
 #endif // ALITE_CONNECTION_H

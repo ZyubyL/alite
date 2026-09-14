@@ -22,6 +22,7 @@
 #define MODULE_NAME "_alite"
 
 #define ALITE_DEFAULT_POOL_SIZE 4
+#define ALITE_DEFAULT_BUSY_TIMEOUT "5000"
 
 /* Rust style types */
 typedef unsigned long      usize;

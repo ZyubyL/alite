@@ -21,10 +21,27 @@
 typedef struct {
     PyObject_HEAD
     ConnectionObject **connections;
+    i64                opened_conns;
     char              *path;
     i64                pool_size;
+    PyThread_type_lock lock;
+    i8                 lock_init;
+    i8                 closed;
 } PoolObject;
 
 extern PyTypeObject PoolType;
+
+/*
+ * Checkout a connection from the pool. Create a new one if under pool_size.
+ * Set conn->in_use to 1. Must call Pool_return_connection when done.
+ * Return NULL with exception on failure.
+ */
+ConnectionObject* Pool_get_connection(PoolObject *self);
+
+/*
+ * Return the connection to the pool.
+ * Set conn->in_use to 0.
+ */
+void Pool_return_connection(PoolObject *self, ConnectionObject *conn);
 
 #endif //ALITE_POOL_H
