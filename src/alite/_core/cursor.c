@@ -106,6 +106,6 @@ PyTypeObject CursorType = {
     .tp_doc       = "SQLite query cursor",
     .tp_flags     = Py_TPFLAGS_DEFAULT,
     .tp_init      = (initproc)Cursor_init,
-    .tp_del       = (destructor)Cursor_dealloc,
+    .tp_dealloc   = (destructor)Cursor_dealloc,
     .tp_new       = Cursor_new,
 };
