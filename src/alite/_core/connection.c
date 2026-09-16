@@ -76,6 +76,12 @@ i8 Connection_close_db(ConnectionObject *self)
     return rc;
 }
 
+static PyObject* Connection_close(ConnectionObject *self, PyObject *Py_UNUSED(ignored))
+{
+    Connection_close_db(self);
+    Py_RETURN_NONE;
+}
+
 static i8 Connection_init(ConnectionObject *self, PyObject *args, PyObject *kwargs)
 {
     return 0;
@@ -94,6 +100,11 @@ static PyObject* Connection_new(PyTypeObject *type, PyObject *args, PyObject *kw
     return (PyObject *)self;
 }
 
+static PyMethodDef Connection_methods[] = {
+    { "close", (PyCFunction)Connection_close, METH_NOARGS, "Close database connection" },
+    { NULL },
+};
+
 PyTypeObject ConnectionType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name      = MODULE_NAME ".Pool",
@@ -103,4 +114,5 @@ PyTypeObject ConnectionType = {
     .tp_init      = (initproc)Connection_init,
     .tp_dealloc   = (destructor)Connection_dealloc,
     .tp_new       = Connection_new,
+    .tp_methods   = Connection_methods,
 };

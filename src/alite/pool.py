@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Self
 
@@ -75,5 +76,17 @@ class AsyncPool:
         self._check_closed()
         cursor = await _run_in_thread(
             self._executor, self._pool.execute, sql, params or ()
+        )
+        return AsyncCursor(cursor, self._executor)
+
+    async def executemany(
+        self, sql: str, params_list: Sequence[tuple[Any, ...]]
+    ) -> AsyncCursor:
+        """
+        Execute SQL for each set of parameters in a single transaction.
+        """
+        self._check_closed()
+        cursor = await _run_in_thread(
+            self._executor, self._pool.executemany, sql, params_list
         )
         return AsyncCursor(cursor, self._executor)

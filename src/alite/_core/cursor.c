@@ -44,6 +44,14 @@ static inline i8 do_prepare(CursorObject *self, ConnectionObject *conn, const ch
     return rc;
 }
 
+/* Finalize the statement, set it to NULL, decrease opening stmt */
+static void finalize_stmt(CursorObject *self, ConnectionObject *conn)
+{
+    sqlite3_finalize(self->stmt);
+    self->stmt = NULL;
+    if (conn) { conn->open_stmts--; }
+}
+
 i8 Cursor_prepare(CursorObject *self, ConnectionObject *conn, const char *sql, PyObject *params)
 {
     Py_INCREF(conn);
@@ -61,9 +69,7 @@ i8 Cursor_prepare(CursorObject *self, ConnectionObject *conn, const char *sql, P
 
     if (conn) { conn->open_stmts++; }
     if (Cursor_bind_params(self, params) != 0) {
-        sqlite3_finalize(self->stmt);
-        self->stmt = NULL;
-        if (conn) conn->open_stmts--;
+        finalize_stmt(self, conn);
         return -1;
     }
 
@@ -78,6 +84,20 @@ i8 Cursor_prepare(CursorObject *self, ConnectionObject *conn, const char *sql, P
     return 0;
 }
 
+static PyObject* Cursor_get_rowcount(CursorObject *self, void *closure)
+{
+    return PyLong_FromLongLong(self->rowcount);
+}
+
+static PyObject* Cursor_close(CursorObject *self, PyObject *args)
+{
+    if (!self->closed && self->stmt) {
+        finalize_stmt(self, self->conn);
+        self->closed = 1;
+    }
+    Py_RETURN_NONE;
+}
+
 static i8 Cursor_init(CursorObject *self, PyObject *args, PyObject *kwargs)
 {
     return 0;
@@ -85,6 +105,10 @@ static i8 Cursor_init(CursorObject *self, PyObject *args, PyObject *kwargs)
 
 static void Cursor_dealloc(CursorObject *self)
 {
+    if (!self->closed && self->stmt) {
+        finalize_stmt(self, self->conn);
+        self->closed = 1;
+    }
     Py_XDECREF(self->conn);
     Py_TYPE(self)->tp_free((PyObject *)self);
 }
@@ -94,10 +118,22 @@ static PyObject* Cursor_new(PyTypeObject *type, PyObject *args, PyObject *kwargs
     CursorObject *self = (CursorObject *)type->tp_alloc(type, 0);
     if (self) {
         self->conn = NULL;
+        self->stmt = NULL;
         self->closed = 0;
+        self->rowcount = 0;
     }
     return (PyObject *)self;
 }
+
+static PyMethodDef Cursor_methods[] = {
+    { "close", (PyCFunction)Cursor_close, METH_NOARGS, "Close the cursor" },
+    { NULL },
+};
+
+static PyGetSetDef Cursor_getset[] = {
+    { "rowcount", (getter)Cursor_get_rowcount, NULL, "Number of rows affected", NULL },
+    { NULL },
+};
 
 PyTypeObject CursorType = {
     PyVarObject_HEAD_INIT(NULL, 0)
@@ -108,4 +144,6 @@ PyTypeObject CursorType = {
     .tp_init      = (initproc)Cursor_init,
     .tp_dealloc   = (destructor)Cursor_dealloc,
     .tp_new       = Cursor_new,
+    .tp_methods   = Cursor_methods,
+    .tp_getset    = Cursor_getset,
 };

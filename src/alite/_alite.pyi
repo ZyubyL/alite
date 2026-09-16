@@ -30,11 +30,15 @@ class Pool:
     def execute(
         self, sql: str, params: tuple[Any, ...] | Sequence[Any] = ()
     ) -> Cursor: ...
+    def executemany(
+        self, sql: str, params_list: Sequence[tuple[Any, ...]]
+    ) -> Cursor: ...
 
 class Connection:
     """
     SQLite database connection.
     """
+    def close(self) -> None: ...
 
 class Cursor:
     """

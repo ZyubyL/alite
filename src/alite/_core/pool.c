@@ -14,6 +14,7 @@
 **/
 #include "pool.h"
 #include "alite.h"
+#include "bind.h"
 #include "connection.h"
 #include "cursor.h"
 
@@ -94,6 +95,84 @@ void Pool_return_connection(PoolObject *self, ConnectionObject *conn)
         (cur)->closed = 0; \
     }
 
+/*
+ * Execute an SQL statement (no results). Release GIL when executing.
+ * Return SQLITE_OK on success.
+ */
+static i8 exec(sqlite3 *db, const char *sql)
+{
+    char *errmsg = NULL;
+    i8 rc;
+    Py_BEGIN_ALLOW_THREADS
+    rc = sqlite3_exec(db, sql, NULL, NULL, &errmsg);
+    Py_END_ALLOW_THREADS
+    if (errmsg) { sqlite3_free(errmsg); }
+    return rc;
+}
+
+/*
+ * Prepare an SQL statement. Release GIL when doing.
+ * Return SQLITE_OK on success.
+ */
+static i8 prepare(sqlite3* db, const char *sql, sqlite3_stmt **out)
+{
+    i8 rc;
+    Py_BEGIN_ALLOW_THREADS
+    rc = sqlite3_prepare_v2(db, sql, -1, out, NULL);
+    Py_END_ALLOW_THREADS
+    return rc;
+}
+
+/*
+ * Rollback transaction on error, finalize statement, release resources, set the error and return NULL;
+ */
+static void rollback(PoolObject *self, ConnectionObject *conn, CursorObject *cur, PyObject *seq, i8 managed, const char *msg)
+{
+    if (managed) { exec(conn->db, "ROLLBACK"); }
+
+    if (cur && cur->stmt) {
+        sqlite3_finalize(cur->stmt);
+        cur->stmt = NULL;
+    }
+
+    Py_XDECREF(seq);
+    Py_XDECREF(cur);
+    Pool_return_connection(self, conn);
+    PyErr_Format(PyExc_RuntimeError, "%s: %s", msg, sqlite3_errmsg(conn->db));
+}
+
+/*
+ * Execute prepared statement for each row in the seq.
+ * Return the number of rows executed, or -1 on error.
+ */
+static Py_ssize_t executemany_loop(sqlite3 *db, sqlite3_stmt *stmt, PyObject *seq, Py_ssize_t count, int managed_txn)
+{
+    for (Py_ssize_t i = 0; i < count; i++) {
+        PyObject *row = PySequence_Fast_GET_ITEM(seq, i);
+        if (row && row != Py_None) {
+            if (alite_bind_positional(stmt, row) != SQLITE_OK) {
+                PyErr_Format(PyExc_RuntimeError, "Bind failed: %s", sqlite3_errmsg(db));
+                goto failure;
+            }
+        }
+
+        i8 rc;
+        Py_BEGIN_ALLOW_THREADS
+        rc = sqlite3_step(stmt);
+        Py_END_ALLOW_THREADS
+        if (rc != SQLITE_DONE) {
+            PyErr_Format(PyExc_RuntimeError, "Step failed: %s", sqlite3_errmsg(db));
+            goto failure;
+        }
+        sqlite3_reset(stmt);
+    }
+    return count;
+
+failure:
+    if (managed_txn) { exec(db, "ROLLBACK"); }
+    return -1;
+}
+
 /* Pool.execute(sql, params) */
 static PyObject* Pool_execute(PoolObject *self, PyObject *args, PyObject *kwargs)
 {
@@ -112,6 +191,80 @@ static PyObject* Pool_execute(PoolObject *self, PyObject *args, PyObject *kwargs
 
     if (Cursor_prepare(cur, conn, sql, params) != 0) {
         Py_DECREF(cur);
+        goto failure;
+    }
+
+    Pool_return_connection(self, conn);
+    return (PyObject *)cur;
+
+failure:
+    Pool_return_connection(self, conn);
+    return NULL;
+}
+
+/* Pool.executemany(sql, list[params]) */
+static PyObject* Pool_executemany(PoolObject *self, PyObject *args, PyObject *kwargs)
+{
+    const char *sql;
+    PyObject *params_list;
+
+    static char *kwlist[] = { "sql", "params_list", NULL };
+    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "sO", kwlist, &sql, &params_list)) { return NULL; }
+
+    ConnectionObject *conn = Pool_get_connection(self);
+    if (!conn) { return NULL; }
+
+    NEW_CURSOR(cur);
+    if (!cur) { goto failure; }
+    Py_INCREF(Py_None);
+
+    PyObject *seq = PySequence_Fast(params_list, "params_list must be a sequence");
+    if (!seq) {
+        Py_DECREF(cur);
+        goto failure;
+    }
+
+    Py_ssize_t count = PySequence_Fast_GET_SIZE(seq);
+    if (count == 0) {
+        Py_DECREF(seq);
+        Pool_return_connection(self, conn);
+        return (PyObject *)cur;
+    }
+
+    i8 managed_txn = sqlite3_get_autocommit(conn->db);
+    if (
+        managed_txn
+        && exec(conn->db, "BEGIN IMMEDIATE") != SQLITE_OK
+    ) {
+        Py_DECREF(seq);
+        Py_DECREF(cur);
+        PyErr_Format(PyExc_RuntimeError, "BEGIN failed: %s", sqlite3_errmsg(conn->db));
+        goto failure;
+    }
+
+    if(prepare(conn->db, sql, &cur->stmt) != SQLITE_OK) {
+        rollback(self, conn, cur, seq, managed_txn, "Prepare failed");
+    }
+
+    Py_ssize_t executed = executemany_loop(conn->db, cur->stmt, seq, count, managed_txn);
+    Py_DECREF(seq);
+    if (executed < 0) {
+        sqlite3_finalize(cur->stmt);
+        cur->stmt = NULL;
+        Py_DECREF(cur);
+        goto failure;
+    }
+
+    sqlite3_finalize(cur->stmt);
+    cur->stmt = NULL;
+    cur->rowcount = (i64)executed;
+
+    if (
+        managed_txn
+        && exec(conn->db, "COMMIT") != SQLITE_OK
+    ) {
+        Py_DECREF(cur);
+        PyErr_Format(PyExc_RuntimeError, "COMMIT failed: %s", sqlite3_errmsg(conn->db));
         goto failure;
     }
 
@@ -206,6 +359,7 @@ static PyObject* Pool_close(PoolObject *self, PyObject *args, PyObject *kwargs)
 
 static PyMethodDef Pool_methods[] = {
     { "execute", (PyCFunction)Pool_execute, METH_VARARGS | METH_KEYWORDS, "Execute SQL, return cursor" },
+    { "executemany", (PyCFunction)Pool_executemany, METH_VARARGS | METH_KEYWORDS, "Execute SQL for each param set" },
     { "close", (PyCFunction)Pool_close, METH_NOARGS, "Close all connections in the pool" },
     { NULL },
 };
