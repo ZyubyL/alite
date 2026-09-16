@@ -101,7 +101,7 @@ static PyObject* Cursor_new(PyTypeObject *type, PyObject *args, PyObject *kwargs
 
 PyTypeObject CursorType = {
     PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name      = MODULE_NAME ".Connection",
+    .tp_name      = MODULE_NAME ".Cursor",
     .tp_basicsize = sizeof(CursorObject),
     .tp_doc       = "SQLite query cursor",
     .tp_flags     = Py_TPFLAGS_DEFAULT,
