@@ -16,7 +16,6 @@
 #include "alite.h"
 #include "connection.h"
 #include "cursor.h"
-#include "pythread.h"
 
 /*
  * Find a free connection in the pool.
