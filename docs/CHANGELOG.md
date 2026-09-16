@@ -4,7 +4,7 @@ Alite uses [Semantic versioning](https://semver.org)
 
 ---
 
-## 0.2.0.alpha0 - [Unreleased]
+## 0.2.0.alpha0 - 2026/09/16
 
 ### Added
 - `Pool.execute`, `Pool.executemany`, `Pool.close()`.
