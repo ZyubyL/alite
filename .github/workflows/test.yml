@@ -1,0 +1,33 @@
+name: Run tests
+permissions:
+  contents: read
+on:
+  push:
+    paths:
+      - "tests/**"
+      - "src/**"
+      - ".github/workflows/test.yml"
+      - "pyproject.toml"
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Set up uv and python
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install sqlite headers
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev
+
+      - name: Test with Python ${{ matrix.python-version }}
+        run: |
+          uv sync --group dev
+          uv run python setup.py build_ext --inplace
+          uv run --frozen pytest
