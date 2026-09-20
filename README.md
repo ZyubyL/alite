@@ -1,6 +1,11 @@
-# Alite
+<p align="center">
+    <h1>Alite - Asynchronous SQLite library</h1>
+</p>
 
-Async SQLite3 library
+![license](https://img.shields.io/badge/license-Apache%202.0-green?style=flat)
+![Tests](https://github.com/zyubyl/alite/actions/workflows/test.yml/badge.svg)
+![PyPI version](https://img.shields.io/pypi/v/alite)
+![Python versions](https://img.shields.io/pypi/pyversions/alite)
 
 > [!note]
 > This project is under development.
