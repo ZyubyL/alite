@@ -82,7 +82,7 @@ static PyObject* Connection_close(ConnectionObject *self, PyObject *Py_UNUSED(ig
     Py_RETURN_NONE;
 }
 
-static i8 Connection_init(ConnectionObject *self, PyObject *args, PyObject *kwargs)
+static int Connection_init(ConnectionObject *self, PyObject *args, PyObject *kwargs)
 {
     return 0;
 }
@@ -105,14 +105,20 @@ static PyMethodDef Connection_methods[] = {
     { NULL },
 };
 
-PyTypeObject ConnectionType = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name      = MODULE_NAME ".Pool",
-    .tp_basicsize = sizeof(ConnectionObject),
-    .tp_doc       = "SQLite connection",
-    .tp_flags     = Py_TPFLAGS_DEFAULT,
-    .tp_init      = (initproc)Connection_init,
-    .tp_dealloc   = (destructor)Connection_dealloc,
-    .tp_new       = Connection_new,
-    .tp_methods   = Connection_methods,
+static PyType_Slot Connection_slots[] = {
+    {Py_tp_doc, "SQLite connection"},
+    {Py_tp_init, Connection_init},
+    {Py_tp_new, Connection_new},
+    {Py_tp_dealloc, Connection_dealloc},
+    {Py_tp_methods, Connection_methods},
+    {0, NULL},
 };
+
+PyType_Spec Connection_spec = {
+    .name      = MODULE_NAME ".Connection",
+    .basicsize = sizeof(ConnectionObject),
+    .flags     = Py_TPFLAGS_DEFAULT,
+    .slots     = Connection_slots,
+};
+
+PyTypeObject *ConnectionType = NULL;

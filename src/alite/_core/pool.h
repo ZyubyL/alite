@@ -29,7 +29,8 @@ typedef struct {
     i8                 closed;
 } PoolObject;
 
-extern PyTypeObject PoolType;
+extern PyTypeObject *PoolType;
+extern PyType_Spec   Pool_spec;
 
 /*
  * Checkout a connection from the pool. Create a new one if under pool_size.

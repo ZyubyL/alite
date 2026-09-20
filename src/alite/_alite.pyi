@@ -21,6 +21,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from typing import Any
 
+DEFAULT_POOL_SIZE: int
+MAX_POOL_SIZE: int
+
 class Pool:
     """
     SQLite connection pool.

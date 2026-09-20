@@ -98,7 +98,7 @@ static PyObject* Cursor_close(CursorObject *self, PyObject *args)
     Py_RETURN_NONE;
 }
 
-static i8 Cursor_init(CursorObject *self, PyObject *args, PyObject *kwargs)
+static int Cursor_init(CursorObject *self, PyObject *args, PyObject *kwargs)
 {
     return 0;
 }
@@ -135,15 +135,21 @@ static PyGetSetDef Cursor_getset[] = {
     { NULL },
 };
 
-PyTypeObject CursorType = {
-    PyVarObject_HEAD_INIT(NULL, 0)
-    .tp_name      = MODULE_NAME ".Cursor",
-    .tp_basicsize = sizeof(CursorObject),
-    .tp_doc       = "SQLite query cursor",
-    .tp_flags     = Py_TPFLAGS_DEFAULT,
-    .tp_init      = (initproc)Cursor_init,
-    .tp_dealloc   = (destructor)Cursor_dealloc,
-    .tp_new       = Cursor_new,
-    .tp_methods   = Cursor_methods,
-    .tp_getset    = Cursor_getset,
+static PyType_Slot Cursor_slots[] = {
+    {Py_tp_doc, "SQLite query cursor"},
+    {Py_tp_init, Cursor_init},
+    {Py_tp_new, Cursor_new},
+    {Py_tp_dealloc, Cursor_dealloc},
+    {Py_tp_getset, Cursor_getset},
+    {Py_tp_methods, Cursor_methods},
+    {0, NULL},
 };
+
+PyType_Spec Cursor_spec = {
+    .name      = MODULE_NAME ".Cursor",
+    .basicsize = sizeof(CursorObject),
+    .flags     = Py_TPFLAGS_DEFAULT,
+    .slots     = Cursor_slots,
+};
+
+PyTypeObject *CursorType = NULL;

@@ -26,7 +26,8 @@ typedef struct {
     i64               rowcount;
 } CursorObject;
 
-extern PyTypeObject CursorType;
+extern PyTypeObject *CursorType;
+extern PyType_Spec   Cursor_spec;
 
 /*
  * Prepare and bind an SQL statement. Increase conn->open_stmts on success.

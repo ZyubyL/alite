@@ -21,6 +21,7 @@ from __future__ import annotations
 from importlib.metadata import version
 from pathlib import Path
 
+from alite._alite import DEFAULT_POOL_SIZE
 from alite._alite import Pool as _Pool
 from alite.pool import AsyncPool
 
@@ -30,7 +31,7 @@ See current alite version.
 """
 
 
-def create_pool(database: str | Path, pool_size: int = 4) -> AsyncPool:
+def create_pool(database: str | Path, pool_size: int = DEFAULT_POOL_SIZE) -> AsyncPool:
     """
     Create an async connection pool to an SQLite database.
 

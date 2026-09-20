@@ -24,21 +24,69 @@ static PyModuleDef alite_module = {
     .m_size = -1,
 };
 
-#define ALITE_INIT_MODULE(mod) PyObject *mod = PyModule_Create(&alite_module)
-
-static inline i8 init_type(PyObject *mod, PyTypeObject *type, const char *name)
+/*
+ * Create heap types from specs.
+ * Return 0 if OK, -1 with error when fail.
+ */
+static int create_types(void)
 {
-    return PyType_Ready(type) >= 0 && PyModule_AddObjectRef(mod, name, (PyObject *)type) >= 0;
+    PoolType = (PyTypeObject *)PyType_FromSpec(&Pool_spec);
+    ConnectionType = (PyTypeObject *)PyType_FromSpec(&Connection_spec);
+    CursorType = (PyTypeObject *)PyType_FromSpec(&Cursor_spec);
+    if (!PoolType || !ConnectionType || !CursorType) { return -1; }
+    return 0;
+}
+
+/*
+ * Add created types to the module.
+ * Return 0 on OK, -1 with error when fail.
+ */
+static int add_types(PyObject *mod)
+{
+    if (PyModule_AddObjectRef(mod, "Pool", (PyObject *)PoolType) < 0) { return -1; }
+    if (PyModule_AddObjectRef(mod, "Connection", (PyObject *)ConnectionType) < 0) { return -1; }
+    if (PyModule_AddObjectRef(mod, "Cursor", (PyObject *)CursorType) < 0) { return -1; }
+    return 0;
+}
+
+/*
+ * Cleanup created types.
+ */
+static void cleanup(void)
+{
+    Py_XDECREF(PoolType);
+    Py_XDECREF(ConnectionType);
+    Py_XDECREF(CursorType);
+    PoolType = NULL;
+    ConnectionType = NULL;
+    CursorType = NULL;
+}
+
+/*
+ * Export ALITE_MAX_POOL_SIZE and ALITE_DEFAULT_POOL_SIZE.
+ * Return 0 on OK, -1 when fail.
+ */
+static int export_consts(PyObject *mod)
+{
+    if (PyModule_AddIntConstant(mod, "MAX_POOL_SIZE", ALITE_MAX_POOL_SIZE) < 0) { return -1; }
+    if (PyModule_AddIntConstant(mod, "DEFAULT_POOL_SIZE", ALITE_DEFAULT_POOL_SIZE) < 0) { return -1; }
+    return 0;
 }
 
 PyMODINIT_FUNC PyInit__alite(void)
 {
-    ALITE_INIT_MODULE(mod);
+    PyObject *mod = PyModule_Create(&alite_module);
+    if (!mod) { return NULL; }
+
     if (
-        !mod
-        || !init_type(mod, &PoolType, "Pool")
-        || !init_type(mod, &ConnectionType, "Connection")
-        || !init_type(mod, &CursorType, "Cursor")
-    ) return NULL;
+        create_types() < 0 ||
+        add_types(mod) < 0 ||
+        export_consts(mod) < 0
+    ) {
+        cleanup();
+        Py_DECREF(mod);
+        return NULL;
+    }
+
     return mod;
 }
