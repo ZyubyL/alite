@@ -28,6 +28,4 @@ jobs:
 
       - name: Test with Python ${{ matrix.python-version }}
         run: |
-          uv sync --group dev
-          uv run python setup.py build_ext --inplace
-          uv run --frozen pytest
+          make test
