@@ -6,6 +6,7 @@ Alite uses [Semantic versioning](https://semver.org)
 
 ### Changed:
 - `Pool.pool_size` property.
+- Limit pool size to max 256.
 
 ---
 
