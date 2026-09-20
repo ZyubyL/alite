@@ -31,8 +31,8 @@ class AsyncPool:
     """
 
     def __init__(self, _pool: _Pool, pool_size: int = 4) -> None:
-        if pool_size <= 0 or pool_size > 64:
-            raise ValueError("pool_size must between 0 and 64.")
+        if pool_size <= 0 or pool_size > 256:
+            raise ValueError("pool_size must between 1 and 256.")
         self._pool = _pool
         self._executor = ThreadPoolExecutor(
             max_workers=pool_size, thread_name_prefix="alite"

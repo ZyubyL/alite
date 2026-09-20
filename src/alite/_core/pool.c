@@ -370,7 +370,7 @@ static PyMethodDef Pool_methods[] = {
 };
 
 static PyGetSetDef Pool_getset[] = {
-    { "pool_size", (getter)Pool_get_pool_size, NULL, "Number of rows affected", NULL },
+    { "pool_size", (getter)Pool_get_pool_size, NULL, "Number of pool size initiated", NULL },
     { NULL },
 };
 
