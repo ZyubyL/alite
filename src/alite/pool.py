@@ -32,7 +32,7 @@ class AsyncPool:
     """
 
     def __init__(self, _pool: _Pool, pool_size: int = DEFAULT_POOL_SIZE) -> None:
-        if not 0 <= pool_size <= MAX_POOL_SIZE:
+        if not 1 <= pool_size <= MAX_POOL_SIZE:
             raise ValueError("pool_size must between 1 and %d.", MAX_POOL_SIZE)
         self._pool = _pool
         self._executor = ThreadPoolExecutor(
