@@ -21,9 +21,9 @@
 typedef struct {
     PyObject_HEAD
     ConnectionObject **connections;
-    i64                opened_conns;
+    usize              opened_conns;
     char              *path;
-    i64                pool_size;
+    usize              pool_size;
     PyThread_type_lock lock;
     i8                 lock_init;
     i8                 closed;

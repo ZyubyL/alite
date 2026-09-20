@@ -31,6 +31,8 @@ class AsyncPool:
     """
 
     def __init__(self, _pool: _Pool, pool_size: int = 4) -> None:
+        if pool_size <= 0 or pool_size > 64:
+            raise ValueError("pool_size must between 0 and 64.")
         self._pool = _pool
         self._executor = ThreadPoolExecutor(
             max_workers=pool_size, thread_name_prefix="alite"
@@ -66,6 +68,13 @@ class AsyncPool:
     def _check_closed(self) -> None:
         if self._closed:
             raise RuntimeError("Pool is closed")
+
+    @property
+    def pool_size(self) -> int:
+        """
+        Get the Pool size.
+        """
+        return self._pool.pool_size
 
     async def execute(
         self, sql: str, params: tuple[Any, ...] | None = None

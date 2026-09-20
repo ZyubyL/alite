@@ -2,6 +2,11 @@
 
 Alite uses [Semantic versioning](https://semver.org)
 
+## 0.3.0.alpha0 - [Unreleased]
+
+### Changed:
+- `Pool.pool_size` property.
+
 ---
 
 ## 0.2.0.alpha0 - 2026/09/16

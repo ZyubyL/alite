@@ -24,7 +24,7 @@
  */
 static inline ConnectionObject* find_free_connection(PoolObject *self)
 {
-    for (i64 i = 0; i < self->opened_conns; i++) {
+    for (usize i = 0; i < self->opened_conns; i++) {
         if (!self->connections[i]->in_use && self->connections[i]->db) {
             self->connections[i]->in_use = 1;
             return self->connections[i];
@@ -173,6 +173,11 @@ failure:
     return -1;
 }
 
+static PyObject* Pool_get_pool_size(PoolObject *self, void *closure)
+{
+    return PyLong_FromUnsignedLong(self->pool_size);
+}
+
 /* Pool.execute(sql, params) */
 static PyObject* Pool_execute(PoolObject *self, PyObject *args, PyObject *kwargs)
 {
@@ -283,13 +288,13 @@ static i8 Pool_init(PoolObject *self, PyObject *args, PyObject *kwargs)
 
     static char *kwlist[] = { "path", "pool_size", NULL };
     if (
-        !PyArg_ParseTupleAndKeywords(args, kwargs, "s|i", kwlist, &path, &pool_size)
+        !PyArg_ParseTupleAndKeywords(args, kwargs, "s|k", kwlist, &path, &pool_size)
     ) { return -1; }
     self->path = strdup(path);
     if (!self->path) { goto nomem; }
 
-    if (pool_size <= 0) {
-        PyErr_SetString(PyExc_ValueError, "pool_size must be greater than 0");
+    if (pool_size < 1 || pool_size > ALITE_MAX_POOL_SIZE) {
+        PyErr_Format(PyExc_ValueError, "pool_size must be between 1 and %lu", ALITE_MAX_POOL_SIZE);
         goto cleanup;
     }
     self->pool_size = pool_size;
@@ -319,7 +324,7 @@ cleanup:
 
 static void Pool_dealloc(PoolObject *self)
 {
-    for (i64 i = 0; i < self->opened_conns; i++) {
+    for (usize i = 0; i < self->opened_conns; i++) {
         Connection_close_db(self->connections[i]);
         Py_DECREF(self->connections[i]);
     }
@@ -348,7 +353,7 @@ static PyObject* Pool_close(PoolObject *self, PyObject *args, PyObject *kwargs)
 {
     PyThread_acquire_lock(self->lock, WAIT_LOCK);
     self->closed = 1;
-    for (i64 i = 0; i < self->opened_conns; i++) {
+    for (usize i = 0; i < self->opened_conns; i++) {
         ConnectionObject *c = self->connections[i];
         Connection_close_db(c);
         c->in_use = 0;
@@ -364,6 +369,11 @@ static PyMethodDef Pool_methods[] = {
     { NULL },
 };
 
+static PyGetSetDef Pool_getset[] = {
+    { "pool_size", (getter)Pool_get_pool_size, NULL, "Number of rows affected", NULL },
+    { NULL },
+};
+
 PyTypeObject PoolType = {
     PyVarObject_HEAD_INIT(NULL, 0)
     .tp_name      = MODULE_NAME ".Pool",
@@ -373,5 +383,6 @@ PyTypeObject PoolType = {
     .tp_init      = (initproc)Pool_init,
     .tp_dealloc   = (destructor)Pool_dealloc,
     .tp_new       = Pool_new,
-    .tp_methods = Pool_methods,
+    .tp_methods   = Pool_methods,
+    .tp_getset    = Pool_getset,
 };

@@ -33,6 +33,8 @@ class Pool:
     def executemany(
         self, sql: str, params_list: Sequence[tuple[Any, ...]]
     ) -> Cursor: ...
+    @property
+    def pool_size(self) -> int: ...
 
 class Connection:
     """
