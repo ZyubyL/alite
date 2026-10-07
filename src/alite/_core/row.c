@@ -15,10 +15,10 @@
 #include "row.h"
 #include "alite.h"
 
-PyObject* Row_from_tuple(PyObject *values, PyObject *names, PyObject *index)
+object* Row_from_tuple(object *values, object *names, object *index)
 {
     RowObject *self = PyObject_New(RowObject, RowType);
-    if (!self) {
+    if (not self) {
         Py_DECREF(values);
         Py_DECREF(names);
         Py_DECREF(index);
@@ -27,70 +27,70 @@ PyObject* Row_from_tuple(PyObject *values, PyObject *names, PyObject *index)
     self->values = values;
     self->names = names;
     self->index = index;
-    return (PyObject *)self;
+    return (object *)self;
 }
 
 /* row[0], row["name"] */
-static PyObject* Row_subscript(RowObject *self, PyObject *key)
+static object* Row_subscript(RowObject *self, object *key)
 {
-    PyObject *idx = key;
+    object *idx = key;
     if (PyUnicode_Check(key)) {
         idx = PyDict_GetItemWithError(self->index, key);
-        if (!idx) {
-            if (!PyErr_Occurred()) {
-                PyErr_SetString(PyExc_IndexError, "No item with that key");
+        if (not idx) {
+            if (not PyErr_Occurred()) {
+                PyErr_SetString(IndexError, "No item with that key");
             }
             return NULL;
         }
-    } else if (!PyLong_Check(key)) {
-        PyErr_SetString(PyExc_TypeError, "Row indices must be int or str");
+    } else if (not PyLong_Check(key)) {
+        PyErr_SetString(TypeError, "Row indices must be int or str");
         return NULL;
     }
-    const Py_ssize_t i = PyLong_AsSsize_t(idx);
-    if (i == -1 && PyErr_Occurred()) { return NULL; }
+    const isize i = PyLong_AsSsize_t(idx);
+    if (i == -1 and PyErr_Occurred()) { return NULL; }
     return PySequence_GetItem(self->values, i);
 }
 
-static PyObject* Row_item(RowObject *self, Py_ssize_t i)
+static object* Row_item(RowObject *self, isize i)
 {
-    PyObject *v = PyTuple_GetItem(self->values, i);
+    object *v = PyTuple_GetItem(self->values, i);
     Py_XINCREF(v);
     return v;
 }
 
-static Py_ssize_t Row_length(RowObject *self)
+static isize Row_length(RowObject *self)
 {
     return PyTuple_GET_SIZE(self->values);
 }
 
-static PyObject* Row_iter(RowObject *self)
+static object* Row_iter(RowObject *self)
 {
     return PyObject_GetIter(self->values);
 }
 
 /* row.keys() -> list[str] */
-static PyObject* Row_keys(RowObject *self, PyObject *Py_UNUSED(ignored))
+static object* Row_keys(RowObject *self, object *Py_UNUSED(ignored))
 {
     return PySequence_List(self->names);
 }
 
-static PyObject* Row_repr(RowObject *self)
+static object* Row_repr(RowObject *self)
 {
     return PyUnicode_FromFormat("<alite.Row %R>", self->values);
 }
 
 /* EQ/NE against tuple and Row. */
-static PyObject* Row_richcompare(RowObject *self, PyObject *other, int op)
+static object* Row_richcompare(RowObject *self, object *other, int op)
 {
-    if (op != Py_EQ && op != Py_NE) { Py_RETURN_NOTIMPLEMENTED; }
+    if (op != Py_EQ and op != Py_NE) { Py_RETURN_NOTIMPLEMENTED; }
 
-    PyObject *tup;
+    object *tup;
     if (Py_TYPE(other) == RowType) { tup = ((RowObject *)other)-> values; }
     else if (PyTuple_Check(other)) { tup = other; }
     else { Py_RETURN_NOTIMPLEMENTED; }
 
     Py_INCREF(tup);
-    PyObject *res = PyObject_RichCompare(self->values, tup, op);
+    object *res = PyObject_RichCompare(self->values, tup, op);
     Py_DECREF(tup);
     return res;
 }
@@ -100,13 +100,13 @@ static void Row_dealloc(RowObject *self)
     Py_XDECREF(self->values);
     Py_XDECREF(self->names);
     Py_XDECREF(self->index);
-    Py_TYPE(self)->tp_free((PyObject *)self);
+    FREE_OBJ;
 }
 
 /* Block Row() construction from Python */
-static PyObject* Row_new_impl(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+static object* Row_new_impl(type *type, object *args, object *kwargs)
 {
-    PyErr_SetString(PyExc_TypeError, "Cannot create Row directly");
+    PyErr_SetString(TypeError, "Cannot create Row directly");
     return NULL;
 }
 
@@ -116,17 +116,17 @@ static PyMethodDef Row_methods[] = {
 };
 
 static PyType_Slot Row_slots[] = {
-    {Py_tp_doc, "SQLite result row with index and key access"},
-    {Py_tp_new, Row_new_impl},
-    {Py_tp_dealloc, Row_dealloc},
-    {Py_tp_methods, Row_methods},
-    {Py_tp_repr, Row_repr},
-    {Py_tp_richcompare, Row_richcompare},
-    {Py_tp_iter, Row_iter},
-    {Py_mp_subscript, Row_subscript},
-    {Py_sq_item, Row_item},
-    {Py_sq_length, Row_length},
-    {0, NULL},
+    { Py_tp_doc,         "SQLite result row with index and key access" },
+    { Py_tp_new,         Row_new_impl                                  },
+    { Py_tp_dealloc,     Row_dealloc                                   },
+    { Py_tp_methods,     Row_methods                                   },
+    { Py_tp_repr,        Row_repr                                      },
+    { Py_tp_richcompare, Row_richcompare                               },
+    { Py_tp_iter,        Row_iter                                      },
+    { Py_mp_subscript,   Row_subscript                                 },
+    { Py_sq_item,        Row_item                                      },
+    { Py_sq_length,      Row_length                                    },
+    { 0,                 NULL                                          },
 };
 
 PyType_Spec Row_spec = {
@@ -136,4 +136,4 @@ PyType_Spec Row_spec = {
     .slots     = Row_slots,
 };
 
-PyTypeObject *RowType = NULL;
+type *RowType = NULL;

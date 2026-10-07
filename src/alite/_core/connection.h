@@ -24,8 +24,8 @@ typedef struct {
     usize    open_stmts;
 } ConnectionObject;
 
-extern PyTypeObject *ConnectionType;
-extern PyType_Spec   Connection_spec;
+extern type       *ConnectionType;
+extern PyType_Spec Connection_spec;
 
 /*
  * Open the database connection at path.

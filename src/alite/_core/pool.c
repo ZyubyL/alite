@@ -18,6 +18,18 @@
 #include "connection.h"
 #include "cursor.h"
 
+
+/* Require self as PoolObject pointer in scope */
+#define ACQUIRE_LOCK_GIL                          \
+do {                                              \
+    Py_BEGIN_ALLOW_THREADS                        \
+    PyThread_acquire_lock(self->lock, WAIT_LOCK); \
+    Py_END_ALLOW_THREADS                          \
+} while(0)
+
+/* Require self as PoolObject pointer in scope */
+#define RELEASE_LOCK PyThread_release_lock(self->lock)
+
 /*
  * Find a free connection in the pool.
  * Return the connection on success, NULL on failure.
@@ -25,7 +37,7 @@
 static inline ConnectionObject* find_free_connection(PoolObject *self)
 {
     for (usize i = 0; i < self->opened_conns; i++) {
-        if (!self->connections[i]->in_use && self->connections[i]->db) {
+        if (not self->connections[i]->in_use and self->connections[i]->db) {
             self->connections[i]->in_use = 1;
             return self->connections[i];
         }
@@ -41,8 +53,8 @@ static inline ConnectionObject* new_connection(PoolObject *self)
 {
     if (self->opened_conns < self->pool_size) {
         ConnectionObject *conn = PyObject_New(ConnectionObject, ConnectionType);
-        if (!conn) { return NULL; }
-        conn->db = NULL;
+        if (not conn) { return NULL; }
+        MAKE_NULL(conn->db);
         conn->in_use = 1;
         if (Connection_open_db(conn, self->path) != 0) {
             Py_DECREF(conn);
@@ -57,12 +69,10 @@ static inline ConnectionObject* new_connection(PoolObject *self)
 
 ConnectionObject* Pool_get_connection(PoolObject *self)
 {
-    Py_BEGIN_ALLOW_THREADS
-    PyThread_acquire_lock(self->lock, WAIT_LOCK);
-    Py_END_ALLOW_THREADS
+    ACQUIRE_LOCK_GIL;
     if (self->closed) {
-        PyThread_release_lock(self->lock);
-        PyErr_SetString(PyExc_RuntimeError, "Pool is closed");
+        RELEASE_LOCK;
+        PyErr_SetString(RuntimeError, "Pool is closed");
         return NULL;
     }
 
@@ -73,32 +83,30 @@ ConnectionObject* Pool_get_connection(PoolObject *self)
     if (conn) { goto success; }
 
     // Failure
-    PyThread_release_lock(self->lock);
-    PyErr_SetString(PyExc_RuntimeError, "Cannot get connection");
+    RELEASE_LOCK;
+    PyErr_SetString(RuntimeError, "Cannot get connection");
     return NULL;
 
 success:
-    PyThread_release_lock(self->lock);
+    RELEASE_LOCK;
     return conn;
 }
 
 void Pool_return_connection(PoolObject *self, ConnectionObject *conn)
 {
-    Py_BEGIN_ALLOW_THREADS
-    PyThread_acquire_lock(self->lock, WAIT_LOCK);
-    Py_END_ALLOW_THREADS
+    ACQUIRE_LOCK_GIL;
     conn->in_use = 0;
-    PyThread_release_lock(self->lock);
+    RELEASE_LOCK;
 }
 
 static CursorObject* new_cursor()
 {
     CursorObject *cur = PyObject_New(CursorObject, CursorType);
     if (cur) {
-        cur->stmt = NULL;
-        cur->conn = NULL;
-        cur->col_names = NULL;
-        cur->col_index = NULL;
+        MAKE_NULL(cur->stmt);
+        MAKE_NULL(cur->conn);
+        MAKE_NULL(cur->col_names);
+        MAKE_NULL(cur->col_index);
         cur->closed = 0;
         cur->done = 0;
         cur->rowcount = 0;
@@ -138,42 +146,39 @@ static i8 prepare(sqlite3* db, const char *sql, sqlite3_stmt **out)
 /*
  * Rollback transaction on error, finalize statement, release resources, set the error and return NULL;
  */
-static void rollback(PoolObject *self, ConnectionObject *conn, CursorObject *cur, PyObject *seq, i8 managed, const char *msg)
+static void rollback(PoolObject *self, ConnectionObject *conn, CursorObject *cur, object *seq, i8 managed, const char *msg)
 {
     if (managed) { exec(conn->db, "ROLLBACK"); }
 
-    if (cur && cur->stmt) {
+    if (cur and cur->stmt) {
         sqlite3_finalize(cur->stmt);
-        cur->stmt = NULL;
+        MAKE_NULL(cur->stmt);
     }
 
     Py_XDECREF(seq);
     Py_XDECREF(cur);
     Pool_return_connection(self, conn);
-    PyErr_Format(PyExc_RuntimeError, "%s: %s", msg, sqlite3_errmsg(conn->db));
+    PyErr_Format(RuntimeError, "%s: %s", msg, sqlite3_errmsg(conn->db));
 }
 
 /*
  * Execute prepared statement for each row in the seq.
  * Return the number of rows executed, or -1 on error.
  */
-static Py_ssize_t executemany_loop(sqlite3 *db, sqlite3_stmt *stmt, PyObject *seq, Py_ssize_t count, int managed_txn)
+static isize executemany_loop(sqlite3 *db, sqlite3_stmt *stmt, object *seq, isize count, int managed_txn)
 {
-    for (Py_ssize_t i = 0; i < count; i++) {
-        PyObject *row = PySequence_Fast_GET_ITEM(seq, i);
-        if (row && row != Py_None) {
+    for (isize i = 0; i < count; i++) {
+        object *row = PySequence_Fast_GET_ITEM(seq, i);
+        if (row and row != None) {
             if (alite_bind_positional(stmt, row) != SQLITE_OK) {
-                PyErr_Format(PyExc_RuntimeError, "Bind failed: %s", sqlite3_errmsg(db));
+                PyErr_Format(RuntimeError, "Bind failed: %s", sqlite3_errmsg(db));
                 goto failure;
             }
         }
 
-        i8 rc;
-        Py_BEGIN_ALLOW_THREADS
-        rc = sqlite3_step(stmt);
-        Py_END_ALLOW_THREADS
+        i8 rc = stmt_step_gil(stmt);
         if (rc != SQLITE_DONE) {
-            PyErr_Format(PyExc_RuntimeError, "Step failed: %s", sqlite3_errmsg(db));
+            PyErr_Format(RuntimeError, "Step failed: %s", sqlite3_errmsg(db));
             goto failure;
         }
         sqlite3_reset(stmt);
@@ -193,8 +198,8 @@ static i8 begin_managed_txn(ConnectionObject *conn, i8 *out_managed)
 {
     i8 managed = sqlite3_get_autocommit(conn->db);
     *out_managed = managed;
-    if (managed && exec(conn->db, "BEGIN IMMEDIATE") != SQLITE_OK) {
-        PyErr_Format(PyExc_RuntimeError, "BEGIN failed: %s", sqlite3_errmsg(conn->db));
+    if (managed and exec(conn->db, "BEGIN IMMEDIATE") != SQLITE_OK) {
+        PyErr_Format(RuntimeError, "BEGIN failed: %s", sqlite3_errmsg(conn->db));
         return -1;
     }
     return 0;
@@ -206,14 +211,14 @@ static i8 begin_managed_txn(ConnectionObject *conn, i8 *out_managed)
  */
 static i8 commit_managed_txn(ConnectionObject *conn, i8 managed)
 {
-    if (managed && exec(conn->db, "COMMIT") != SQLITE_OK) {
-        PyErr_Format(PyExc_RuntimeError, "COMMIT failed: %s", sqlite3_errmsg(conn->db));
+    if (managed and exec(conn->db, "COMMIT") != SQLITE_OK) {
+        PyErr_Format(RuntimeError, "COMMIT failed: %s", sqlite3_errmsg(conn->db));
         return -1;
     }
     return 0;
 }
 
-static i8 prepare_or_rollback(PoolObject *pool, ConnectionObject *conn, CursorObject *cur, PyObject *seq, const char *sql, i8 managed)
+static i8 prepare_or_rollback(PoolObject *pool, ConnectionObject *conn, CursorObject *cur, object *seq, const char *sql, i8 managed)
 {
     if (prepare(conn->db, sql, &cur->stmt) != SQLITE_OK) {
         rollback(pool, conn, cur, seq, managed, "Prepare failed");
@@ -222,25 +227,25 @@ static i8 prepare_or_rollback(PoolObject *pool, ConnectionObject *conn, CursorOb
     return 0;
 }
 
-static PyObject* Pool_get_pool_size(PoolObject *self, void *closure)
+static object* Pool_get_pool_size(PoolObject *self, void *closure)
 {
     return PyLong_FromUnsignedLong(self->pool_size);
 }
 
 /* Pool.execute(sql, params) */
-static PyObject* Pool_execute(PoolObject *self, PyObject *args, PyObject *kwargs)
+static object* Pool_execute(PoolObject *self, object *args, object *kwargs)
 {
     const char *sql;
-    PyObject *params = NULL;
+    object *params = NULL;
 
     static char *kwlist[] = { "sql", "params", NULL };
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "s|O", kwlist, &sql, &params)) { return NULL; }
+    if (not PyArg_ParseTupleAndKeywords(args, kwargs, "s|O", kwlist, &sql, &params)) { return NULL; }
 
     ConnectionObject *conn = Pool_get_connection(self);
-    if (!conn) { return NULL; }
+    if (not conn) { return NULL; }
 
     CursorObject *cur = new_cursor();
-    if (!cur) { goto failure; }
+    if (not cur) { goto failure; }
 
     if (Cursor_prepare(cur, conn, sql, params) != 0) {
         Py_DECREF(cur);
@@ -248,7 +253,7 @@ static PyObject* Pool_execute(PoolObject *self, PyObject *args, PyObject *kwargs
     }
 
     Pool_return_connection(self, conn);
-    return (PyObject *)cur;
+    return (object *)cur;
 
 failure:
     Pool_return_connection(self, conn);
@@ -256,31 +261,31 @@ failure:
 }
 
 /* Pool.executemany(sql, list[params]) */
-static PyObject* Pool_executemany(PoolObject *self, PyObject *args, PyObject *kwargs)
+static object* Pool_executemany(PoolObject *self, object *args, object *kwargs)
 {
     const char *sql;
-    PyObject *params_list;
+    object *params_list;
 
     static char *kwlist[] = { "sql", "params_list", NULL };
-    if (!PyArg_ParseTupleAndKeywords(args, kwargs, "sO", kwlist, &sql, &params_list)) { return NULL; }
+    if (not PyArg_ParseTupleAndKeywords(args, kwargs, "sO", kwlist, &sql, &params_list)) { return NULL; }
 
     ConnectionObject *conn = Pool_get_connection(self);
-    if (!conn) { return NULL; }
+    if (not conn) { return NULL; }
 
     CursorObject *cur = new_cursor();
-    if (!cur) { goto failure; }
+    if (not cur) { goto failure; }
 
-    PyObject *seq = PySequence_Fast(params_list, "params_list must be a sequence");
-    if (!seq) {
+    object *seq = PySequence_Fast(params_list, "params_list must be a sequence");
+    if (not seq) {
         Py_DECREF(cur);
         goto failure;
     }
 
-    Py_ssize_t count = PySequence_Fast_GET_SIZE(seq);
+    isize count = PySequence_Fast_GET_SIZE(seq);
     if (count == 0) {
         Py_DECREF(seq);
         Pool_return_connection(self, conn);
-        return (PyObject *)cur;
+        return (object *)cur;
     }
 
     i8 managed_txn = 0;
@@ -293,17 +298,17 @@ static PyObject* Pool_executemany(PoolObject *self, PyObject *args, PyObject *kw
         return NULL;
     }
 
-    Py_ssize_t executed = executemany_loop(conn->db, cur->stmt, seq, count, managed_txn);
+    isize executed = executemany_loop(conn->db, cur->stmt, seq, count, managed_txn);
     Py_DECREF(seq);
     if (executed < 0) {
         sqlite3_finalize(cur->stmt);
-        cur->stmt = NULL;
+        MAKE_NULL(cur->stmt);
         Py_DECREF(cur);
         goto failure;
     }
 
     sqlite3_finalize(cur->stmt);
-    cur->stmt = NULL;
+    MAKE_NULL(cur->stmt);
     cur->rowcount = (i64)executed;
 
     if (commit_managed_txn(conn, managed_txn) != 0) {
@@ -312,30 +317,30 @@ static PyObject* Pool_executemany(PoolObject *self, PyObject *args, PyObject *kw
     }
 
     Pool_return_connection(self, conn);
-    return (PyObject *)cur;
+    return (object *)cur;
 
 failure:
     Pool_return_connection(self, conn);
     return NULL;
 }
 
-static int Pool_init(PoolObject *self, PyObject *args, PyObject *kwargs)
+static int Pool_init(PoolObject *self, object *args, object *kwargs)
 {
     const char *path;
     i64 pool_size = ALITE_DEFAULT_POOL_SIZE;
 
     static char *kwlist[] = { "path", "pool_size", NULL };
     if (
-        !PyArg_ParseTupleAndKeywords(args, kwargs, "s|k", kwlist, &path, &pool_size)
+        not PyArg_ParseTupleAndKeywords(args, kwargs, "s|k", kwlist, &path, &pool_size)
     ) { return -1; }
 
-    if (pool_size < 1 || pool_size > ALITE_MAX_POOL_SIZE) {
-        PyErr_Format(PyExc_ValueError, "pool_size must be between 1 and %lu", ALITE_MAX_POOL_SIZE);
+    if (pool_size < 1 or pool_size > ALITE_MAX_POOL_SIZE) {
+        PyErr_Format(ValueError, "pool_size must be between 1 and %lu", ALITE_MAX_POOL_SIZE);
         goto cleanup;
     }
 
     self->path = strdup(path);
-    if (!self->path) {
+    if (not self->path) {
         PyErr_NoMemory();
         goto cleanup;
     }
@@ -343,13 +348,13 @@ static int Pool_init(PoolObject *self, PyObject *args, PyObject *kwargs)
     self->pool_size = pool_size;
     self->opened_conns = 0;
     self->connections = calloc(pool_size, sizeof(ConnectionObject*));
-    if (!self->connections) {
+    if (not self->connections) {
         PyErr_NoMemory();
         goto cleanup;
     }
 
     self->lock = PyThread_allocate_lock();
-    if (!self->lock) {
+    if (not self->lock) {
         PyErr_NoMemory();
         goto cleanup;
     }
@@ -359,12 +364,12 @@ static int Pool_init(PoolObject *self, PyObject *args, PyObject *kwargs)
 
 cleanup:
     free(self->connections);
-    self->connections = NULL;
+    MAKE_NULL(self->connections);
     free(self->path);
-    self->path = NULL;
+    MAKE_NULL(self->path);
     if (self->lock) {
         PyThread_free_lock(self->lock);
-        self->lock = NULL;
+        MAKE_NULL(self->lock);
     }
     self->pool_size = 0;
     self->lock_init = 0;
@@ -382,37 +387,35 @@ static void Pool_dealloc(PoolObject *self)
         free(self->connections);
     }
     if (self->path) { free(self->path); }
-    if (self->lock_init && self->lock) { PyThread_free_lock(self->lock); }
-    Py_TYPE(self)->tp_free((PyObject *)self);
+    if (self->lock_init and self->lock) { PyThread_free_lock(self->lock); }
+    FREE_OBJ;
 }
 
-static PyObject* Pool_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+static object* Pool_new(type *type, object *args, object *kwargs)
 {
     PoolObject *self = (PoolObject *)type->tp_alloc(type, 0);
     if (self) {
-        self->connections = NULL;
+        MAKE_NULL(self->connections);
         self->opened_conns = 0;
         self->pool_size = 0;
-        self->path = NULL;
-        self->lock = NULL;
+        MAKE_NULL(self->path);
+        MAKE_NULL(self->lock);
         self->lock_init = 0;
         self->closed = 0;
     }
-    return (PyObject *)self;
+    return (object *)self;
 }
 
-static PyObject* Pool_close(PoolObject *self, PyObject *args, PyObject *kwargs)
+static object* Pool_close(PoolObject *self, object *args, object *kwargs)
 {
-    Py_BEGIN_ALLOW_THREADS
-    PyThread_acquire_lock(self->lock, WAIT_LOCK);
-    Py_END_ALLOW_THREADS
+    ACQUIRE_LOCK_GIL;
     self->closed = 1;
     for (usize i = 0; i < self->opened_conns; i++) {
         ConnectionObject *c = self->connections[i];
         Connection_close_db(c);
         c->in_use = 0;
     }
-    PyThread_release_lock(self->lock);
+    RELEASE_LOCK;
     Py_RETURN_NONE;
 }
 
@@ -429,13 +432,13 @@ static PyGetSetDef Pool_getset[] = {
 };
 
 static PyType_Slot Pool_slots[] = {
-    {Py_tp_doc, "SQLite connection pool"},
-    {Py_tp_init, Pool_init},
-    {Py_tp_new, Pool_new},
-    {Py_tp_dealloc, Pool_dealloc},
-    {Py_tp_getset, Pool_getset},
-    {Py_tp_methods, Pool_methods},
-    {0, NULL},
+    { Py_tp_doc,     "SQLite connection pool" },
+    { Py_tp_init,    Pool_init                },
+    { Py_tp_new,     Pool_new                 },
+    { Py_tp_dealloc, Pool_dealloc             },
+    { Py_tp_getset,  Pool_getset              },
+    { Py_tp_methods, Pool_methods             },
+    { 0,             NULL                     },
 };
 
 PyType_Spec Pool_spec = {
@@ -445,4 +448,4 @@ PyType_Spec Pool_spec = {
     .slots     = Pool_slots,
 };
 
-PyTypeObject *PoolType = NULL;
+type *PoolType = NULL;

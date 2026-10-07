@@ -15,9 +15,10 @@
 #include "alite.h"
 #include "connection.h"
 #include "cursor.h"
-#include "object.h"
 #include "pool.h"
 #include "row.h"
+
+#define CREATE_MODULE(mod) object *mod = PyModule_Create(&alite_module)
 
 static PyModuleDef alite_module = {
     PyModuleDef_HEAD_INIT,
@@ -32,11 +33,11 @@ static PyModuleDef alite_module = {
  */
 static int create_types(void)
 {
-    PoolType = (PyTypeObject *)PyType_FromSpec(&Pool_spec);
-    ConnectionType = (PyTypeObject *)PyType_FromSpec(&Connection_spec);
-    CursorType = (PyTypeObject *)PyType_FromSpec(&Cursor_spec);
-    RowType = (PyTypeObject *)PyType_FromSpec(&Row_spec);
-    if (!PoolType || !ConnectionType || !CursorType || !RowType) { return -1; }
+    PoolType       = (type *)PyType_FromSpec(&Pool_spec);
+    ConnectionType = (type *)PyType_FromSpec(&Connection_spec);
+    CursorType     = (type *)PyType_FromSpec(&Cursor_spec);
+    RowType        = (type *)PyType_FromSpec(&Row_spec);
+    if (not PoolType or not ConnectionType or not CursorType or not RowType) { return -1; }
     return 0;
 }
 
@@ -44,12 +45,23 @@ static int create_types(void)
  * Add created types to the module.
  * Return 0 on OK, -1 with error when fail.
  */
-static int add_types(PyObject *mod)
+static int add_types(object *mod)
 {
-    if (PyModule_AddObjectRef(mod, "Pool", (PyObject *)PoolType) < 0) { return -1; }
-    if (PyModule_AddObjectRef(mod, "Connection", (PyObject *)ConnectionType) < 0) { return -1; }
-    if (PyModule_AddObjectRef(mod, "Cursor", (PyObject *)CursorType) < 0) { return -1; }
-    if (PyModule_AddObjectRef(mod, "Row", (PyObject *)RowType) < 0) { return -1; }
+    object *modules[] = {
+        (object *)PoolType,
+        (object *)ConnectionType,
+        (object *)CursorType,
+        (object *)RowType,
+    };
+    const char *module_names[] = {
+        "Pool",
+        "Connection",
+        "Cursor",
+        "Row",
+    };
+    for (usize i = 0; i < LEN(modules); i++) {
+        if (PyModule_AddObjectRef(mod, module_names[i], modules[i]) < 0) { return -1; }
+    }
     return 0;
 }
 
@@ -58,35 +70,36 @@ static int add_types(PyObject *mod)
  */
 static void cleanup(void)
 {
-    Py_XDECREF(PoolType);
-    Py_XDECREF(ConnectionType);
-    Py_XDECREF(CursorType);
-    Py_XDECREF(RowType);
-    PoolType = NULL;
-    ConnectionType = NULL;
-    CursorType = NULL;
-    RowType = NULL;
+    const type *modules[] = {
+        PoolType,
+        ConnectionType,
+        CursorType,
+        RowType,
+    };
+    for (usize i = 0; i < LEN(modules); i++) {
+        Py_CLEAR(modules[i]);
+    }
 }
 
 /*
  * Export ALITE_MAX_POOL_SIZE and ALITE_DEFAULT_POOL_SIZE.
  * Return 0 on OK, -1 when fail.
  */
-static int export_consts(PyObject *mod)
+static int export_consts(object *mod)
 {
-    if (PyModule_AddIntConstant(mod, "MAX_POOL_SIZE", ALITE_MAX_POOL_SIZE) < 0) { return -1; }
+    if (PyModule_AddIntConstant(mod, "MAX_POOL_SIZE",     ALITE_MAX_POOL_SIZE    ) < 0) { return -1; }
     if (PyModule_AddIntConstant(mod, "DEFAULT_POOL_SIZE", ALITE_DEFAULT_POOL_SIZE) < 0) { return -1; }
     return 0;
 }
 
 PyMODINIT_FUNC PyInit__alite(void)
 {
-    PyObject *mod = PyModule_Create(&alite_module);
-    if (!mod) { return NULL; }
+    CREATE_MODULE(mod);
+    if (not mod) { return NULL; }
 
     if (
-        create_types() < 0 ||
-        add_types(mod) < 0 ||
+        create_types() < 0 or
+        add_types(mod) < 0 or
         export_consts(mod) < 0
     ) {
         cleanup();

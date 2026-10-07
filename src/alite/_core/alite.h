@@ -27,6 +27,7 @@
 
 /* Rust style types */
 typedef unsigned long      usize;
+typedef Py_ssize_t         isize;
 typedef signed char        i8;
 typedef signed short       i16;
 typedef int                i32;
@@ -37,5 +38,40 @@ typedef unsigned int       u32;
 typedef unsigned long long u64;
 typedef float              f32;
 typedef double             f64;
+
+#define MAKE_NULL(o) (o) = NULL
+
+/* Python-like syntax */
+#define or ||
+#define and &&
+#define not !
+#define LEN(l) (sizeof(l) / sizeof((l)[0]))
+typedef PyObject        object;
+typedef PyTypeObject    type;
+#define None            Py_None
+#define TypeError       PyExc_TypeError
+#define RuntimeError    PyExc_RuntimeError
+#define ValueError      PyExc_ValueError
+#define ConnectionError PyExc_ConnectionError
+#define IndexError      PyExc_IndexError
+
+/* Some thin wrapper */
+
+static inline const char* errmsg_from_stmt(sqlite3_stmt *stmt)
+{
+    return sqlite3_errmsg(sqlite3_db_handle(stmt));
+}
+
+/* Require self in the scope */
+#define FREE_OBJ Py_TYPE(self)->tp_free((object *)self)
+
+static inline i8 stmt_step_gil(sqlite3_stmt *stmt)
+{
+    int rc;
+    Py_BEGIN_ALLOW_THREADS
+    rc = sqlite3_step(stmt);
+    Py_END_ALLOW_THREADS
+    return rc;
+}
 
 #endif // ALITE_H

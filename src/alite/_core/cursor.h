@@ -22,21 +22,21 @@ typedef struct {
     PyObject_HEAD
     sqlite3_stmt     *stmt;
     ConnectionObject *conn;
-    PyObject         *col_names;
-    PyObject         *col_index;
+    object           *col_names;
+    object           *col_index;
     i8                closed;
     i8                done;
     i64               rowcount;
 } CursorObject;
 
-extern PyTypeObject *CursorType;
-extern PyType_Spec   Cursor_spec;
+extern type       *CursorType;
+extern PyType_Spec Cursor_spec;
 
 /*
  * Prepare and bind an SQL statement. Increase conn->open_stmts on success.
  * Release GIL during preparation.
  * Return 0 on success, -1 on failure.
  */
-extern i8 Cursor_prepare(CursorObject *self, ConnectionObject *conn, const char *sql, PyObject *params);
+extern i8 Cursor_prepare(CursorObject *self, ConnectionObject *conn, const char *sql, object *params);
 
 #endif // ALITE_CURSOR_H

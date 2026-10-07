@@ -21,14 +21,14 @@
 
 
 /* Bind params to stmt */
-static inline i8 Cursor_bind_params(CursorObject *self, PyObject *params)
+static inline i8 Cursor_bind_params(CursorObject *self, object *params)
 {
-    if (!params || params == Py_None) { return 0; }
+    if (not params or params == None) { return 0; }
 
     sqlite3_reset(self->stmt);
     sqlite3_clear_bindings(self->stmt);
 
-    if (PyTuple_Check(params) || PyList_Check(params)) {
+    if (PyTuple_Check(params) or PyList_Check(params)) {
         return alite_bind_positional(self->stmt, params);
     } else if (PyDict_Check(params)) {
         return alite_bind_named(self->stmt, params);
@@ -47,7 +47,7 @@ static inline i8 do_prepare(CursorObject *self, ConnectionObject *conn, const ch
 }
 
 /* Column i of current row as Python object. NULL on error. */
-static inline PyObject* column_value(sqlite3_stmt *stmt, int col)
+static inline object* column_value(sqlite3_stmt *stmt, int col)
 {
     switch (sqlite3_column_type(stmt, col)) {
         case SQLITE_INTEGER:
@@ -76,24 +76,24 @@ static i8 ensure_columns(CursorObject *self)
     if (self->col_names) { return 0; }
 
     const int ncols = sqlite3_column_count(self->stmt);
-    PyObject *names = PyTuple_New(ncols);
-    PyObject *index = PyDict_New();
-    if (!names || !index) { goto failure; }
+    object *names = PyTuple_New(ncols);
+    object *index = PyDict_New();
+    if (not names or not index) { goto failure; }
 
     for (int i = 0; i < ncols; i++) {
         const char *cname = sqlite3_column_name(self->stmt, i);
-        if (!cname) {
+        if (not cname) {
             PyErr_NoMemory();
             goto failure;
         }
-        PyObject *name = PyUnicode_FromString(cname);
-        if (!name) { goto failure; }
+        object *name = PyUnicode_FromString(cname);
+        if (not name) { goto failure; }
         PyTuple_SET_ITEM(names, i, name);
 
         if (PyDict_GetItemWithError(index, name) == NULL) {
             if (PyErr_Occurred()) { goto failure; }
-            PyObject *idx = PyLong_FromLong(i);
-            if (!idx) { goto failure; }
+            object *idx = PyLong_FromLong(i);
+            if (not idx) { goto failure; }
             int rc = PyDict_SetItem(index, name, idx);
             Py_DECREF(idx);
             if (rc < 0) { goto failure; }
@@ -110,13 +110,13 @@ failure:
 }
 
 /* Build Row from current stmt row. */
-static PyObject* make_row(CursorObject *self, int ncols)
+static object* make_row(CursorObject *self, int ncols)
 {
-    PyObject *values = PyTuple_New(ncols);
-    if (!values) { return NULL; }
+    object *values = PyTuple_New(ncols);
+    if (not values) { return NULL; }
     for (int i = 0; i < ncols; i++) {
-        PyObject *v = column_value(self->stmt, i);
-        if (!v) {
+        object *v = column_value(self->stmt, i);
+        if (not v) {
             Py_DECREF(values);
             return NULL;
         }
@@ -129,10 +129,8 @@ static PyObject* make_row(CursorObject *self, int ncols)
 
 static inline void clear_columns(CursorObject *self)
 {
-    Py_XDECREF(self->col_names);
-    Py_XDECREF(self->col_index);
-    self->col_names = NULL;
-    self->col_index = NULL;
+    Py_CLEAR(self->col_names);
+    Py_CLEAR(self->col_index);
 }
 
 /* Finalize the statement, set it to NULL, decrease opening stmt */
@@ -140,11 +138,11 @@ static void finalize_stmt(CursorObject *self, ConnectionObject *conn)
 {
     sqlite3_finalize(self->stmt);
     clear_columns(self);
-    self->stmt = NULL;
+    MAKE_NULL(self->stmt);
     if (conn) { conn->open_stmts--; }
 }
 
-i8 Cursor_prepare(CursorObject *self, ConnectionObject *conn, const char *sql, PyObject *params)
+i8 Cursor_prepare(CursorObject *self, ConnectionObject *conn, const char *sql, object *params)
 {
     Py_INCREF(conn);
     self->conn = conn;
@@ -152,11 +150,11 @@ i8 Cursor_prepare(CursorObject *self, ConnectionObject *conn, const char *sql, P
     if (self->stmt) {
         sqlite3_finalize(self->stmt);
         clear_columns(self);
-        self->stmt = NULL;
+        MAKE_NULL(self->stmt);
     };
 
     if (do_prepare(self, conn, sql) != SQLITE_OK) {
-        PyErr_Format(PyExc_RuntimeError, "Prepare failed: %s", sqlite3_errmsg(conn->db));
+        PyErr_Format(RuntimeError, "Prepare failed: %s", sqlite3_errmsg(conn->db));
         return -1;
     }
 
@@ -170,37 +168,32 @@ i8 Cursor_prepare(CursorObject *self, ConnectionObject *conn, const char *sql, P
     if (sqlite3_stmt_readonly(self->stmt)) {
         self->rowcount = -1;
     } else {
-        Py_BEGIN_ALLOW_THREADS
-        sqlite3_step(self->stmt);
-        Py_END_ALLOW_THREADS
+        stmt_step_gil(self->stmt);
         self->rowcount = sqlite3_changes(conn->db);
     }
     return 0;
 }
 
-static PyObject* Cursor_get_rowcount(CursorObject *self, void *closure)
+static object* Cursor_get_rowcount(CursorObject *self, void *closure)
 {
     return PyLong_FromLongLong(self->rowcount);
 }
 
-static PyObject* Cursor_fetchall(CursorObject *self, PyObject* Py_UNUSED(ignored))
+static object* Cursor_fetchall(CursorObject *self, object* Py_UNUSED(ignored))
 {
     if (self->closed) {
-        PyErr_SetString(PyExc_RuntimeError, "Cursor is closed");
+        PyErr_SetString(RuntimeError, "Cursor is closed");
         return NULL;
     }
-    if (!self->stmt || self->done) { return PyList_New(0); }
+    if (not self->stmt or self->done) { return PyList_New(0); }
     if (ensure_columns(self) != 0) { return NULL; }
 
-    PyObject *rows = PyList_New(0);
-    if (!rows) { return NULL; }
+    object *rows = PyList_New(0);
+    if (not rows) { return NULL; }
 
     int ncols = sqlite3_column_count(self->stmt);
     while (1) {
-        i8 rc;
-        Py_BEGIN_ALLOW_THREADS
-        rc = sqlite3_step(self->stmt);
-        Py_END_ALLOW_THREADS
+        i8 rc = stmt_step_gil(self->stmt);
 
         if (rc == SQLITE_DONE) {
             self->done = 1;
@@ -208,11 +201,11 @@ static PyObject* Cursor_fetchall(CursorObject *self, PyObject* Py_UNUSED(ignored
         }
         if (rc != SQLITE_ROW) {
             Py_DECREF(rows);
-            PyErr_Format(PyExc_RuntimeError, "Step failed: %s", sqlite3_errmsg(sqlite3_db_handle(self->stmt)));
+            PyErr_Format(RuntimeError, "Step failed: %s", errmsg_from_stmt(self->stmt));
             return NULL;
         }
-        PyObject *row = make_row(self, ncols);
-        if (!row || PyList_Append(rows, row) < 0) {
+        object *row = make_row(self, ncols);
+        if (not row or PyList_Append(rows, row) < 0) {
             Py_XDECREF(row);
             Py_DECREF(rows);
             return NULL;
@@ -222,44 +215,44 @@ static PyObject* Cursor_fetchall(CursorObject *self, PyObject* Py_UNUSED(ignored
     return rows;
 }
 
-static PyObject* Cursor_close(CursorObject *self, PyObject *args)
+static object* Cursor_close(CursorObject *self, object *args)
 {
-    if (!self->closed && self->stmt) {
+    if (not self->closed and self->stmt) {
         finalize_stmt(self, self->conn);
         self->closed = 1;
     }
     Py_RETURN_NONE;
 }
 
-static int Cursor_init(CursorObject *self, PyObject *args, PyObject *kwargs)
+static int Cursor_init(CursorObject *self, object *args, object *kwargs)
 {
     return 0;
 }
 
 static void Cursor_dealloc(CursorObject *self)
 {
-    if (!self->closed && self->stmt) {
+    if (not self->closed and self->stmt) {
         finalize_stmt(self, self->conn);
         self->closed = 1;
     }
     clear_columns(self);
     Py_XDECREF(self->conn);
-    Py_TYPE(self)->tp_free((PyObject *)self);
+    FREE_OBJ;
 }
 
-static PyObject* Cursor_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+static object* Cursor_new(type *type, object *args, object *kwargs)
 {
     CursorObject *self = (CursorObject *)type->tp_alloc(type, 0);
     if (self) {
-        self->conn = NULL;
-        self->stmt = NULL;
-        self->col_names = NULL;
-        self->col_index = NULL;
+        MAKE_NULL(self->conn);
+        MAKE_NULL(self->stmt);
+        MAKE_NULL(self->col_names);
+        MAKE_NULL(self->col_index);
         self->closed = 0;
         self->done = 0;
         self->rowcount = 0;
     }
-    return (PyObject *)self;
+    return (object *)self;
 }
 
 static PyMethodDef Cursor_methods[] = {
@@ -274,13 +267,13 @@ static PyGetSetDef Cursor_getset[] = {
 };
 
 static PyType_Slot Cursor_slots[] = {
-    {Py_tp_doc, "SQLite query cursor"},
-    {Py_tp_init, Cursor_init},
-    {Py_tp_new, Cursor_new},
-    {Py_tp_dealloc, Cursor_dealloc},
-    {Py_tp_getset, Cursor_getset},
-    {Py_tp_methods, Cursor_methods},
-    {0, NULL},
+    { Py_tp_doc,     "SQLite query cursor" },
+    { Py_tp_init,    Cursor_init           },
+    { Py_tp_new,     Cursor_new            },
+    { Py_tp_dealloc, Cursor_dealloc        },
+    { Py_tp_getset,  Cursor_getset         },
+    { Py_tp_methods, Cursor_methods        },
+    { 0,             NULL                  },
 };
 
 PyType_Spec Cursor_spec = {
@@ -290,4 +283,4 @@ PyType_Spec Cursor_spec = {
     .slots     = Cursor_slots,
 };
 
-PyTypeObject *CursorType = NULL;
+type *CursorType = NULL;

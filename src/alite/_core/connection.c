@@ -18,9 +18,9 @@
 /* Close the database. */
 static i8 do_close(ConnectionObject *self)
 {
-    if (!self->db) { return SQLITE_OK; }
+    if (not self->db) { return SQLITE_OK; }
     i8 rc = sqlite3_close_v2(self->db);
-    if (rc == SQLITE_OK) { self->db = NULL; }
+    if (rc == SQLITE_OK) { MAKE_NULL(self->db); }
     return rc;
 }
 
@@ -50,25 +50,27 @@ static inline i8 enable_wal(ConnectionObject *self)
 i8 Connection_open_db(ConnectionObject *self, const char *path)
 {
     if (self->db) {
-        PyErr_SetString(PyExc_RuntimeError, "Connection already opened");
+        PyErr_SetString(RuntimeError, "Connection already opened");
         return -1;
     }
     if (open_db(self, path) != SQLITE_OK) {
-        PyErr_Format(PyExc_ConnectionError, "Failed to open database: %s", sqlite3_errmsg(self->db));
-        do_close(self);
-        return -1;
+        PyErr_Format(ConnectionError, "Failed to open database: %s", sqlite3_errmsg(self->db));
+        goto failure;
     }
     if (enable_wal(self) != SQLITE_OK) {
-        PyErr_Format(PyExc_ConnectionError, "Failed to config the database: %s", sqlite3_errmsg(self->db));
-        do_close(self);
-        return -1;
+        PyErr_Format(ConnectionError, "Failed to config the database: %s", sqlite3_errmsg(self->db));
+        goto failure;
     }
     return 0;
+
+failure:
+    do_close(self);
+    return -1;
 }
 
 i8 Connection_close_db(ConnectionObject *self)
 {
-    if (!self->db) { return SQLITE_OK; }
+    if (not self->db) { return SQLITE_OK; }
     i8 rc;
     Py_BEGIN_ALLOW_THREADS
     rc = do_close(self);
@@ -76,13 +78,13 @@ i8 Connection_close_db(ConnectionObject *self)
     return rc;
 }
 
-static PyObject* Connection_close(ConnectionObject *self, PyObject *Py_UNUSED(ignored))
+static object* Connection_close(ConnectionObject *self, object *Py_UNUSED(ignored))
 {
     Connection_close_db(self);
     Py_RETURN_NONE;
 }
 
-static int Connection_init(ConnectionObject *self, PyObject *args, PyObject *kwargs)
+static int Connection_init(ConnectionObject *self, object *args, object *kwargs)
 {
     return 0;
 }
@@ -90,14 +92,14 @@ static int Connection_init(ConnectionObject *self, PyObject *args, PyObject *kwa
 static void Connection_dealloc(ConnectionObject *self)
 {
     do_close(self);
-    Py_TYPE(self)->tp_free((PyObject *)self);
+    FREE_OBJ;
 }
 
-static PyObject* Connection_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+static object* Connection_new(type *type, object *args, object *kwargs)
 {
     ConnectionObject *self = (ConnectionObject *)type->tp_alloc(type, 0);
-    if (self) { self->db = NULL; }
-    return (PyObject *)self;
+    if (self) { MAKE_NULL(self->db); }
+    return (object *)self;
 }
 
 static PyMethodDef Connection_methods[] = {
@@ -106,12 +108,12 @@ static PyMethodDef Connection_methods[] = {
 };
 
 static PyType_Slot Connection_slots[] = {
-    {Py_tp_doc, "SQLite connection"},
-    {Py_tp_init, Connection_init},
-    {Py_tp_new, Connection_new},
-    {Py_tp_dealloc, Connection_dealloc},
-    {Py_tp_methods, Connection_methods},
-    {0, NULL},
+    { Py_tp_doc,     "SQLite connection" },
+    { Py_tp_init,    Connection_init     },
+    { Py_tp_new,     Connection_new      },
+    { Py_tp_dealloc, Connection_dealloc  },
+    { Py_tp_methods, Connection_methods  },
+    { 0,             NULL                },
 };
 
 PyType_Spec Connection_spec = {
@@ -121,4 +123,4 @@ PyType_Spec Connection_spec = {
     .slots     = Connection_slots,
 };
 
-PyTypeObject *ConnectionType = NULL;
+type *ConnectionType = NULL;

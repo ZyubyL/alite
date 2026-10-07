@@ -15,22 +15,22 @@
 #ifndef ALITE_ROW_H
 #define ALITE_ROW_H
 
-#include <Python.h>
+#include "alite.h"
 
 typedef struct {
     PyObject_HEAD
-    PyObject *values;
-    PyObject *names;
-    PyObject *index;
+    object *values;
+    object *names;
+    object *index;
 } RowObject;
 
-extern PyTypeObject *RowType;
-extern PyType_Spec   Row_spec;
+extern type       *RowType;
+extern PyType_Spec Row_spec;
 
 /*
  * Build a Row. Steal all references.
  * Return NULL on failure with exception set.
  */
-extern PyObject* Row_from_tuple(PyObject *values, PyObject *names, PyObject *index);
+extern object* Row_from_tuple(object *values, object *names, object *index);
 
 #endif // ALITE_ROW_H
