@@ -1,11 +1,11 @@
-<p align="center">
+<div align="center">
     <h1>Alite - Asynchronous SQLite library</h1>
-</p>
-
-![license](https://img.shields.io/badge/license-Apache%202.0-green?style=flat)
-![Tests](https://github.com/zyubyl/alite/actions/workflows/test.yml/badge.svg)
-![PyPI version](https://img.shields.io/pypi/v/alite)
-![Python versions](https://img.shields.io/pypi/pyversions/alite)
+    <br />
+    <img src="https://img.shields.io/github/license/zyubyl/alite?label=License&style=for-the-badge" alt="MIT LICENSE" />
+    <img src="https://img.shields.io/github/actions/workflow/status/zyubyl/alite/test.yml?label=Tests&style=for-the-badge" alt="Tests" />
+    <img src="https://img.shields.io/pypi/v/alite?label=PyPI&color=blue&style=for-the-badge" alt="PyPI" />
+    <img src="https://img.shields.io/pypi/pyversions/alite?label=Python%20Version&color=blue&style=for-the-badge" alt="Supported python versions" />
+</div>
 
 > [!note]
 > This project is under development.
@@ -21,6 +21,7 @@
 - [ ] row with index and key access
 
 ## Installation
+
 ```sh
 # using uv
 uv add alite
@@ -30,6 +31,7 @@ python -m pip install alite
 ```
 
 ## Quickstart
+
 ```py
 import alite
 
