@@ -21,7 +21,7 @@ from __future__ import annotations
 from importlib.metadata import version
 from pathlib import Path
 
-from alite._alite import DEFAULT_POOL_SIZE
+from alite._alite import DEFAULT_POOL_SIZE, Row
 from alite._alite import Pool as _Pool
 from alite.pool import AsyncPool
 
@@ -48,7 +48,11 @@ def create_pool(database: str | Path, pool_size: int = DEFAULT_POOL_SIZE) -> Asy
         # Pool auto closes with async with context manager.
         ```
     """
-    return AsyncPool(_Pool(str(database), pool_size))
+    return AsyncPool(_Pool(str(database), pool_size), pool_size)
 
 
-__all__ = ["AsyncPool", "create_pool"]
+__all__ = [
+    "AsyncPool",
+    "create_pool",
+    "Row",
+]

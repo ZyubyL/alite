@@ -22,7 +22,10 @@ typedef struct {
     PyObject_HEAD
     sqlite3_stmt     *stmt;
     ConnectionObject *conn;
+    PyObject         *col_names;
+    PyObject         *col_index;
     i8                closed;
+    i8                done;
     i64               rowcount;
 } CursorObject;
 

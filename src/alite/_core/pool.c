@@ -57,7 +57,9 @@ static inline ConnectionObject* new_connection(PoolObject *self)
 
 ConnectionObject* Pool_get_connection(PoolObject *self)
 {
+    Py_BEGIN_ALLOW_THREADS
     PyThread_acquire_lock(self->lock, WAIT_LOCK);
+    Py_END_ALLOW_THREADS
     if (self->closed) {
         PyThread_release_lock(self->lock);
         PyErr_SetString(PyExc_RuntimeError, "Pool is closed");
@@ -82,7 +84,9 @@ success:
 
 void Pool_return_connection(PoolObject *self, ConnectionObject *conn)
 {
+    Py_BEGIN_ALLOW_THREADS
     PyThread_acquire_lock(self->lock, WAIT_LOCK);
+    Py_END_ALLOW_THREADS
     conn->in_use = 0;
     PyThread_release_lock(self->lock);
 }
@@ -93,7 +97,10 @@ static CursorObject* new_cursor()
     if (cur) {
         cur->stmt = NULL;
         cur->conn = NULL;
+        cur->col_names = NULL;
+        cur->col_index = NULL;
         cur->closed = 0;
+        cur->done = 0;
         cur->rowcount = 0;
         return cur;
     }
@@ -396,7 +403,9 @@ static PyObject* Pool_new(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 
 static PyObject* Pool_close(PoolObject *self, PyObject *args, PyObject *kwargs)
 {
+    Py_BEGIN_ALLOW_THREADS
     PyThread_acquire_lock(self->lock, WAIT_LOCK);
+    Py_END_ALLOW_THREADS
     self->closed = 1;
     for (usize i = 0; i < self->opened_conns; i++) {
         ConnectionObject *c = self->connections[i];

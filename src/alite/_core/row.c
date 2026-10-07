@@ -1,0 +1,139 @@
+/* Copyright 2026-present ZyubyL
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+**/
+#include "row.h"
+#include "alite.h"
+
+PyObject* Row_from_tuple(PyObject *values, PyObject *names, PyObject *index)
+{
+    RowObject *self = PyObject_New(RowObject, RowType);
+    if (!self) {
+        Py_DECREF(values);
+        Py_DECREF(names);
+        Py_DECREF(index);
+        return NULL;
+    }
+    self->values = values;
+    self->names = names;
+    self->index = index;
+    return (PyObject *)self;
+}
+
+/* row[0], row["name"] */
+static PyObject* Row_subscript(RowObject *self, PyObject *key)
+{
+    PyObject *idx = key;
+    if (PyUnicode_Check(key)) {
+        idx = PyDict_GetItemWithError(self->index, key);
+        if (!idx) {
+            if (!PyErr_Occurred()) {
+                PyErr_SetString(PyExc_IndexError, "No item with that key");
+            }
+            return NULL;
+        }
+    } else if (!PyLong_Check(key)) {
+        PyErr_SetString(PyExc_TypeError, "Row indices must be int or str");
+        return NULL;
+    }
+    const Py_ssize_t i = PyLong_AsSsize_t(idx);
+    if (i == -1 && PyErr_Occurred()) { return NULL; }
+    return PySequence_GetItem(self->values, i);
+}
+
+static PyObject* Row_item(RowObject *self, Py_ssize_t i)
+{
+    PyObject *v = PyTuple_GetItem(self->values, i);
+    Py_XINCREF(v);
+    return v;
+}
+
+static Py_ssize_t Row_length(RowObject *self)
+{
+    return PyTuple_GET_SIZE(self->values);
+}
+
+static PyObject* Row_iter(RowObject *self)
+{
+    return PyObject_GetIter(self->values);
+}
+
+/* row.keys() -> list[str] */
+static PyObject* Row_keys(RowObject *self, PyObject *Py_UNUSED(ignored))
+{
+    return PySequence_List(self->names);
+}
+
+static PyObject* Row_repr(RowObject *self)
+{
+    return PyUnicode_FromFormat("<alite.Row %R>", self->values);
+}
+
+/* EQ/NE against tuple and Row. */
+static PyObject* Row_richcompare(RowObject *self, PyObject *other, int op)
+{
+    if (op != Py_EQ && op != Py_NE) { Py_RETURN_NOTIMPLEMENTED; }
+
+    PyObject *tup;
+    if (Py_TYPE(other) == RowType) { tup = ((RowObject *)other)-> values; }
+    else if (PyTuple_Check(other)) { tup = other; }
+    else { Py_RETURN_NOTIMPLEMENTED; }
+
+    Py_INCREF(tup);
+    PyObject *res = PyObject_RichCompare(self->values, tup, op);
+    Py_DECREF(tup);
+    return res;
+}
+
+static void Row_dealloc(RowObject *self)
+{
+    Py_XDECREF(self->values);
+    Py_XDECREF(self->names);
+    Py_XDECREF(self->index);
+    Py_TYPE(self)->tp_free((PyObject *)self);
+}
+
+/* Block Row() construction from Python */
+static PyObject* Row_new_impl(PyTypeObject *type, PyObject *args, PyObject *kwargs)
+{
+    PyErr_SetString(PyExc_TypeError, "Cannot create Row directly");
+    return NULL;
+}
+
+static PyMethodDef Row_methods[] = {
+    { "keys", (PyCFunction)Row_keys, METH_NOARGS, "Column names" },
+    { NULL },
+};
+
+static PyType_Slot Row_slots[] = {
+    {Py_tp_doc, "SQLite result row with index and key access"},
+    {Py_tp_new, Row_new_impl},
+    {Py_tp_dealloc, Row_dealloc},
+    {Py_tp_methods, Row_methods},
+    {Py_tp_repr, Row_repr},
+    {Py_tp_richcompare, Row_richcompare},
+    {Py_tp_iter, Row_iter},
+    {Py_mp_subscript, Row_subscript},
+    {Py_sq_item, Row_item},
+    {Py_sq_length, Row_length},
+    {0, NULL},
+};
+
+PyType_Spec Row_spec = {
+    .name      = MODULE_NAME ".Row",
+    .basicsize = sizeof(RowObject),
+    .flags     = Py_TPFLAGS_DEFAULT,
+    .slots     = Row_slots,
+};
+
+PyTypeObject *RowType = NULL;

@@ -19,6 +19,7 @@ if sys.platform == "win32":
         "src/alite/_core/connection.c",
         "src/alite/_core/pool.c",
         "src/alite/_core/bind.c",
+        "src/alite/_core/row.c",
     ]
     libraries: list[str] = []
     if (vendor_dir / "sqlite3.c").exists():
@@ -33,6 +34,7 @@ else:
         "src/alite/_core/connection.c",
         "src/alite/_core/pool.c",
         "src/alite/_core/bind.c",
+        "src/alite/_core/row.c",
     ]
     libraries = ["sqlite3"]
 

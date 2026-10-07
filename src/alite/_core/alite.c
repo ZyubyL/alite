@@ -15,7 +15,9 @@
 #include "alite.h"
 #include "connection.h"
 #include "cursor.h"
+#include "object.h"
 #include "pool.h"
+#include "row.h"
 
 static PyModuleDef alite_module = {
     PyModuleDef_HEAD_INIT,
@@ -33,7 +35,8 @@ static int create_types(void)
     PoolType = (PyTypeObject *)PyType_FromSpec(&Pool_spec);
     ConnectionType = (PyTypeObject *)PyType_FromSpec(&Connection_spec);
     CursorType = (PyTypeObject *)PyType_FromSpec(&Cursor_spec);
-    if (!PoolType || !ConnectionType || !CursorType) { return -1; }
+    RowType = (PyTypeObject *)PyType_FromSpec(&Row_spec);
+    if (!PoolType || !ConnectionType || !CursorType || !RowType) { return -1; }
     return 0;
 }
 
@@ -46,6 +49,7 @@ static int add_types(PyObject *mod)
     if (PyModule_AddObjectRef(mod, "Pool", (PyObject *)PoolType) < 0) { return -1; }
     if (PyModule_AddObjectRef(mod, "Connection", (PyObject *)ConnectionType) < 0) { return -1; }
     if (PyModule_AddObjectRef(mod, "Cursor", (PyObject *)CursorType) < 0) { return -1; }
+    if (PyModule_AddObjectRef(mod, "Row", (PyObject *)RowType) < 0) { return -1; }
     return 0;
 }
 
@@ -57,9 +61,11 @@ static void cleanup(void)
     Py_XDECREF(PoolType);
     Py_XDECREF(ConnectionType);
     Py_XDECREF(CursorType);
+    Py_XDECREF(RowType);
     PoolType = NULL;
     ConnectionType = NULL;
     CursorType = NULL;
+    RowType = NULL;
 }
 
 /*

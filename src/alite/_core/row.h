@@ -12,30 +12,25 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 **/
-#ifndef ALITE_H
-#define ALITE_H
+#ifndef ALITE_ROW_H
+#define ALITE_ROW_H
 
-#define PY_SSIZE_T_CLEAN
 #include <Python.h>
-#include <sqlite3.h>
 
-#define MODULE_NAME "_alite"
+typedef struct {
+    PyObject_HEAD
+    PyObject *values;
+    PyObject *names;
+    PyObject *index;
+} RowObject;
 
-#define ALITE_DEFAULT_POOL_SIZE 4
-#define ALITE_MAX_POOL_SIZE 256
-#define ALITE_DEFAULT_BUSY_TIMEOUT "5000"
+extern PyTypeObject *RowType;
+extern PyType_Spec   Row_spec;
 
-/* Rust style types */
-typedef unsigned long      usize;
-typedef signed char        i8;
-typedef signed short       i16;
-typedef int                i32;
-typedef signed long long   i64;
-typedef unsigned char      u8;
-typedef unsigned short     u16;
-typedef unsigned int       u32;
-typedef unsigned long long u64;
-typedef float              f32;
-typedef double             f64;
+/*
+ * Build a Row. Steal all references.
+ * Return NULL on failure with exception set.
+ */
+extern PyObject* Row_from_tuple(PyObject *values, PyObject *names, PyObject *index);
 
-#endif // ALITE_H
+#endif // ALITE_ROW_H

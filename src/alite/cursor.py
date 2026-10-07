@@ -17,6 +17,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 
 from alite._alite import Cursor as _Cursor
+from alite._alite import Row
 from alite._threading import _run_in_thread
 
 __all__ = ["AsyncCursor"]
@@ -42,6 +43,12 @@ class AsyncCursor:
                 ResourceWarning,
                 stacklevel=1,
             )
+
+    async def fetchall(self) -> list[Row]:
+        """
+        Fetch all remaining rows.
+        """
+        return await _run_in_thread(self._executor, self._cursor.fetchall)
 
     async def close(self) -> None:
         """
