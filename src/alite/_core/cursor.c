@@ -17,7 +17,6 @@
 #include "bind.h"
 #include "connection.h"
 #include "row.h"
-#include <sqlite3.h>
 
 
 /* Bind params to stmt */
@@ -70,18 +69,53 @@ static inline object* column_value(sqlite3_stmt *stmt, int col)
     }
 }
 
-/* Build col_names + col_index once per statement. Keep first if have duplicate. */
-static i8 ensure_columns(CursorObject *self)
+static i8 cursor_is_valid(CursorObject *self, const char *op)
 {
-    if (self->col_names) { return 0; }
+    if (self->closed) {
+        PyErr_Format(RuntimeError, "Cursor is closed during %s", op);
+        return 0;
+    }
+    return 1;
+}
 
-    const int ncols = sqlite3_column_count(self->stmt);
-    object *names = PyTuple_New(ncols);
-    object *index = PyDict_New();
-    if (not names or not index) { goto failure; }
+static void reset_cursor_state(CursorObject *self)
+{
+    self->done = 0;
+    self->rowcount = 0;
+}
 
-    for (int i = 0; i < ncols; i++) {
-        const char *cname = sqlite3_column_name(self->stmt, i);
+static inline void clear_columns(CursorObject *self)
+{
+    Py_CLEAR(self->col_names);
+    Py_CLEAR(self->col_index);
+}
+
+static void finalize_current_stmt(CursorObject *self, ConnectionObject *conn)
+{
+    if (self->stmt) {
+        sqlite3_finalize(self->stmt);
+        clear_columns(self);
+        MAKE_NULL(self->stmt);
+        if (conn) { conn->open_stmts--; }
+    }
+}
+
+static void handle_cursor_err(CursorObject *self, const char *msg, const char *details)
+{
+    if (details) {
+        PyErr_Format(RuntimeError, "%s: %s", msg, details);
+    } else {
+        PyErr_SetString(RuntimeError, msg);
+    }
+}
+
+static object* create_column_names(sqlite3_stmt *stmt, int col_count)
+{
+    object *names = PyTuple_New(col_count);
+    if (not names) { return NULL; }
+
+    for (int i = 0; i < col_count; i++) {
+        const char *cname = sqlite3_column_name(stmt, i);
         if (not cname) {
             PyErr_NoMemory();
             goto failure;
@@ -89,6 +123,22 @@ static i8 ensure_columns(CursorObject *self)
         object *name = PyUnicode_FromString(cname);
         if (not name) { goto failure; }
         PyTuple_SET_ITEM(names, i, name);
+    }
+    return names;
+
+failure:
+    Py_XDECREF(names);
+    return NULL;
+}
+
+static object* create_column_index(object *col_names, int col_count)
+{
+    object *index = PyDict_New();
+    if (not index) { return NULL; }
+
+    for (int i = 0; i < col_count; i++) {
+        object *name = PyTuple_GET_ITEM(col_names, i);
+        if (not name) { goto failure; }
 
         if (PyDict_GetItemWithError(index, name) == NULL) {
             if (PyErr_Occurred()) { goto failure; }
@@ -99,14 +149,75 @@ static i8 ensure_columns(CursorObject *self)
             if (rc < 0) { goto failure; }
         }
     }
-    self->col_names = names;
-    self->col_index = index;
-    return 0;
+    return index;
 
 failure:
-    Py_XDECREF(names);
     Py_XDECREF(index);
-    return -1;
+    return NULL;
+}
+
+/* Build col_names + col_index once per statement. Keep first if have duplicate. */
+static i8 ensure_columns(CursorObject *self)
+{
+    if (self->col_names) { return 0; }
+
+    const int ncols = sqlite3_column_count(self->stmt);
+
+    object *names = create_column_names(self->stmt, ncols);
+    if (not names) { return -1; }
+
+    object *index = create_column_index(names, ncols);
+    if (not index) { return -1; }
+
+    self->col_names = names;
+    self->col_index = index;
+
+    return 0;
+}
+
+static i8 finalize_previous_stmt(CursorObject *self, ConnectionObject *conn)
+{
+    if (self->stmt) {
+        sqlite3_finalize(self->stmt);
+        clear_columns(self);
+        MAKE_NULL(self->stmt);
+        if (conn) { conn->open_stmts--; }
+    }
+    return 0;
+}
+
+i8 Cursor_prepare(CursorObject *self, ConnectionObject *conn, const char *sql, object *params)
+{
+    Py_INCREF(conn);
+    self->conn = conn;
+
+    if (finalize_previous_stmt(self, conn) != 0) {
+        Py_DECREF(conn);
+        return -1;
+    }
+
+    if (do_prepare(self, conn, sql) != SQLITE_OK) {
+        Py_DECREF(conn);
+        handle_cursor_err(self, "Prepare failed", sqlite3_errmsg(conn->db));
+        return -1;
+    }
+
+    reset_cursor_state(self);
+    conn->open_stmts++;
+
+    if (Cursor_bind_params(self, params) != 0) {
+        finalize_current_stmt(self, conn);
+        Py_DECREF(conn);
+        return -1;
+    }
+
+    if (sqlite3_stmt_readonly(self->stmt)) {
+        self->rowcount = -1;
+    } else {
+        stmt_step_gil(self->stmt);
+        self->rowcount = sqlite3_changes(conn->db);
+    }
+    return 0;
 }
 
 /* Build Row from current stmt row. */
@@ -127,71 +238,25 @@ static object* make_row(CursorObject *self, int ncols)
     return Row_from_tuple(values, self->col_names, self->col_index);
 }
 
-static inline void clear_columns(CursorObject *self)
+static i8 fetchall_validate_state(CursorObject *self)
 {
-    Py_CLEAR(self->col_names);
-    Py_CLEAR(self->col_index);
-}
-
-/* Finalize the statement, set it to NULL, decrease opening stmt */
-static void finalize_stmt(CursorObject *self, ConnectionObject *conn)
-{
-    sqlite3_finalize(self->stmt);
-    clear_columns(self);
-    MAKE_NULL(self->stmt);
-    if (conn) { conn->open_stmts--; }
-}
-
-i8 Cursor_prepare(CursorObject *self, ConnectionObject *conn, const char *sql, object *params)
-{
-    Py_INCREF(conn);
-    self->conn = conn;
-    // If there is still a statement that is not yet finalized. Finalize it.
-    if (self->stmt) {
-        sqlite3_finalize(self->stmt);
-        clear_columns(self);
-        MAKE_NULL(self->stmt);
-    };
-
-    if (do_prepare(self, conn, sql) != SQLITE_OK) {
-        PyErr_Format(RuntimeError, "Prepare failed: %s", sqlite3_errmsg(conn->db));
+    if (!cursor_is_valid(self, "fetchall")) {
         return -1;
     }
-
-    self->done = 0;
-    if (conn) { conn->open_stmts++; }
-    if (Cursor_bind_params(self, params) != 0) {
-        finalize_stmt(self, conn);
-        return -1;
+    if (not self->stmt or self->done) {
+        return 0;
     }
-
-    if (sqlite3_stmt_readonly(self->stmt)) {
-        self->rowcount = -1;
-    } else {
-        stmt_step_gil(self->stmt);
-        self->rowcount = sqlite3_changes(conn->db);
+    if (ensure_columns(self) != 0) {
+        return -1;
     }
     return 0;
 }
 
-static object* Cursor_get_rowcount(CursorObject *self, void *closure)
+static object* fetchall_build_result(CursorObject *self, int ncols)
 {
-    return PyLong_FromLongLong(self->rowcount);
-}
-
-static object* Cursor_fetchall(CursorObject *self, object* Py_UNUSED(ignored))
-{
-    if (self->closed) {
-        PyErr_SetString(RuntimeError, "Cursor is closed");
-        return NULL;
-    }
-    if (not self->stmt or self->done) { return PyList_New(0); }
-    if (ensure_columns(self) != 0) { return NULL; }
-
     object *rows = PyList_New(0);
     if (not rows) { return NULL; }
 
-    int ncols = sqlite3_column_count(self->stmt);
     while (1) {
         int rc = stmt_step_gil(self->stmt);
 
@@ -201,9 +266,10 @@ static object* Cursor_fetchall(CursorObject *self, object* Py_UNUSED(ignored))
         }
         if (rc != SQLITE_ROW) {
             Py_DECREF(rows);
-            PyErr_Format(RuntimeError, "Step failed: %s", errmsg_from_stmt(self->stmt));
+            handle_cursor_err(self, "Step failed", errmsg_from_stmt(self->stmt));
             return NULL;
         }
+
         object *row = make_row(self, ncols);
         if (not row or PyList_Append(rows, row) < 0) {
             Py_XDECREF(row);
@@ -215,10 +281,25 @@ static object* Cursor_fetchall(CursorObject *self, object* Py_UNUSED(ignored))
     return rows;
 }
 
+static object* Cursor_fetchall(CursorObject *self, object* Py_UNUSED(ignored))
+{
+    if (fetchall_validate_state(self) != 0) { return NULL; }
+
+    if (not self->stmt or self->done) { return PyList_New(0); }
+
+    int ncols = sqlite3_column_count(self->stmt);
+    return fetchall_build_result(self, ncols);
+}
+
+static object* Cursor_get_rowcount(CursorObject *self, void *closure)
+{
+    return PyLong_FromLongLong(self->rowcount);
+}
+
 static object* Cursor_close(CursorObject *self, object *args)
 {
     if (not self->closed and self->stmt) {
-        finalize_stmt(self, self->conn);
+        finalize_current_stmt(self, self->conn);
         self->closed = 1;
     }
     Py_RETURN_NONE;
@@ -232,7 +313,7 @@ static int Cursor_init(CursorObject *self, object *args, object *kwargs)
 static void Cursor_dealloc(CursorObject *self)
 {
     if (not self->closed and self->stmt) {
-        finalize_stmt(self, self->conn);
+        finalize_current_stmt(self, self->conn);
         self->closed = 1;
     }
     clear_columns(self);
