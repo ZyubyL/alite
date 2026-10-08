@@ -54,25 +54,44 @@ static inline int enable_wal(ConnectionObject *self)
     return rc;
 }
 
-i8 Connection_open_db(ConnectionObject *self, const char *path)
+static i8 validate_connection_state(ConnectionObject *self)
 {
     if (self->db) {
         PyErr_SetString(RuntimeError, "Connection already opened");
         return -1;
     }
-    if (open_db(self, path) != SQLITE_OK) {
-        PyErr_Format(ConnectionError, "Failed to open database: %s", sqlite3_errmsg(self->db));
-        goto failure;
+    return 0;
+}
+
+static void handle_connection_error(ConnectionObject *self, const char *op)
+{
+    if (self->db) {
+        PyErr_Format(ConnectionError, "Failed to %s database: %s", op, sqlite3_errmsg(self->db));
+        do_close(self);
     }
+}
+
+static i8 config_db_settings(ConnectionObject *self)
+{
     if (enable_wal(self) != SQLITE_OK) {
-        PyErr_Format(ConnectionError, "Failed to config the database: %s", sqlite3_errmsg(self->db));
-        goto failure;
+        handle_connection_error(self, "config");
+        return -1;
     }
     return 0;
+}
 
-failure:
-    do_close(self);
-    return -1;
+i8 Connection_open_db(ConnectionObject *self, const char *path)
+{
+    if (validate_connection_state(self) != 0) {
+        return -1;
+    }
+
+    if (open_db(self, path) != SQLITE_OK) {
+        handle_connection_error(self, "open");
+        return -1;
+    }
+
+    return config_db_settings(self);
 }
 
 int Connection_close_db(ConnectionObject *self)
