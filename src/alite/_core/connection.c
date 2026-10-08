@@ -23,32 +23,32 @@ void Connection_free(ConnectionObject *self) {
 }
 
 /* Close the database. */
-static i8 do_close(ConnectionObject *self)
+static int do_close(ConnectionObject *self)
 {
     if (not self->db) { return SQLITE_OK; }
-    i8 rc = (i8)sqlite3_close_v2(self->db);
+    int rc = sqlite3_close_v2(self->db);
     if (rc == SQLITE_OK) { MAKE_NULL(self->db); }
     return rc;
 }
 
 /* Open the database at path. Release GIL when doing. */
-static inline i8 open_db(ConnectionObject *self, const char *path)
+static inline int open_db(ConnectionObject *self, const char *path)
 {
-    i8 rc;
+    int rc;
     Py_BEGIN_ALLOW_THREADS
-    rc = (i8)sqlite3_open(path, &self->db);
+    rc = sqlite3_open(path, &self->db);
     Py_END_ALLOW_THREADS
     return rc;
 }
 
 /* Enable WAL mode and set busy timeout. Release GIL when doing. */
-static inline i8 enable_wal(ConnectionObject *self)
+static inline int enable_wal(ConnectionObject *self)
 {
-    i8 rc;
+    int rc;
     Py_BEGIN_ALLOW_THREADS
-    rc = (i8)sqlite3_exec(self->db, "PRAGMA journal_mode=WAL", NULL, NULL, NULL);
+    rc = sqlite3_exec(self->db, "PRAGMA journal_mode=WAL", NULL, NULL, NULL);
     if (rc == SQLITE_OK) {
-        rc = (i8)sqlite3_exec(self->db, "PRAGMA busy_timeout=" ALITE_DEFAULT_BUSY_TIMEOUT, NULL, NULL, NULL);
+        rc = sqlite3_exec(self->db, "PRAGMA busy_timeout=" ALITE_DEFAULT_BUSY_TIMEOUT, NULL, NULL, NULL);
     }
     Py_END_ALLOW_THREADS
     return rc;
@@ -75,10 +75,10 @@ failure:
     return -1;
 }
 
-i8 Connection_close_db(ConnectionObject *self)
+int Connection_close_db(ConnectionObject *self)
 {
     if (not self->db) { return SQLITE_OK; }
-    i8 rc;
+    int rc;
     Py_BEGIN_ALLOW_THREADS
     rc = do_close(self);
     Py_END_ALLOW_THREADS

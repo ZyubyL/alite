@@ -39,7 +39,7 @@ extern i8 Connection_open_db(ConnectionObject *self, const char *path);
  * Return SQLITE_OK or SQLITE_BUSY.
  * Set self->db to NULL on success.
  */
-extern i8 Connection_close_db(ConnectionObject *self);
+extern int Connection_close_db(ConnectionObject *self);
 
 /*
  * Close this connection and free the memory.
