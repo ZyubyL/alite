@@ -59,29 +59,48 @@ int alite_bind_value(sqlite3_stmt *stmt, int index, object *value)
         return -1;
     }
     if (rc != SQLITE_OK and not PyErr_Occurred()) {
-        PyErr_Format(
-            RuntimeError,
-            "Bind failed: %s",
-            sqlite3_errmsg(sqlite3_db_handle(stmt))
-        );
+        PyErr_Format(RuntimeError, "Bind failed: %s", sqlite3_errmsg(sqlite3_db_handle(stmt)));
     }
     return rc;
 }
 
-int alite_bind_positional(sqlite3_stmt *stmt, object *params)
+static object* validate_param(object *params)
 {
     object *seq = PySequence_Fast(params, "params must be a sequence");
-    if (not seq) { return -1; }
+    if (not seq) { return NULL; }
+    return seq;
+}
 
+static int bind_positional_sequence(sqlite3_stmt *stmt, object *seq)
+{
     isize len = PySequence_Fast_GET_SIZE(seq);
     for (isize i = 0; i < len; i++) {
-        if (alite_bind_value(stmt, (int)(i + 1), PySequence_Fast_GET_ITEM(seq, i)) != SQLITE_OK) {
-            Py_DECREF(seq);
-            return -1;
-        }
+        if (
+            alite_bind_value(stmt, (int)(i + 1), PySequence_Fast_GET_ITEM(seq, i)) != SQLITE_OK
+        ) { return -1; }
     }
-    Py_DECREF(seq);
     return SQLITE_OK;
+}
+
+int alite_bind_positional(sqlite3_stmt *stmt, object *params)
+{
+    object *seq = validate_param(params);
+    if (not seq) { return -1; }
+
+    int rc = bind_positional_sequence(stmt, seq);
+
+    Py_DECREF(seq);
+    return rc;
+}
+
+static int validate_named_param(sqlite3_stmt *stmt, const char *key_str)
+{
+    int idx = sqlite3_bind_parameter_index(stmt, key_str);
+    if (idx == 0) {
+        PyErr_Format(ValueError, "Unknown parameter: %s", key_str);
+        return -1;
+    }
+    return idx;
 }
 
 int alite_bind_named(sqlite3_stmt *stmt, object *params)
@@ -90,11 +109,8 @@ int alite_bind_named(sqlite3_stmt *stmt, object *params)
     object *key, *value;
     while (PyDict_Next(params, &pos, &key, &value)) {
         const char *key_str = PyUnicode_AsUTF8(key);
-        int idx = sqlite3_bind_parameter_index(stmt, key_str);
-        if (idx == 0) {
-            PyErr_Format(ValueError, "Unknown parameter: %s", key_str);
-            return -1;
-        }
+        int idx = validate_named_param(stmt, key_str);
+        if (idx == -1) { return -1; }
         if (alite_bind_value(stmt, idx, value) != SQLITE_OK) { return -1; }
     }
     return SQLITE_OK;
