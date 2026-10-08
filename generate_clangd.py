@@ -46,6 +46,16 @@ out.append("    c,")  # Explicitly set the header to be C, not C++
 out.append("    -std=c17,")  # This project uses C17 standard
 out.append(f"    -I{sysconfig.get_path('include')}")  # For Python.h
 out.append("  ]")
+out.append("Diagnostics:")
+out.append("  ClangTidy:")
+out.append("    Add: [")
+out.append("      performance-*,")
+out.append("      bugprone-*,")
+out.append("      portability-*,")
+out.append("    ]")
+out.append("    Remove: [")
+out.append("      bugprone-easily-swappable-parameters,")
+out.append("    ]")
 
 clangd = cwd / ".clangd"
 

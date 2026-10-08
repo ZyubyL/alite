@@ -21,18 +21,18 @@
  * Bind single value to statement at index.
  * Return SQLITE_OK on success, none zero on error + exception.
  */
-extern i8 alite_bind_value(sqlite3_stmt *stmt, i64 index, object *value);
+extern int alite_bind_value(sqlite3_stmt *stmt, int index, object *value);
 
 /*
  * Bind positional params (tuple/list) to statement.
  * Return SQLITE_OK on success, -1 on error.
  */
-extern i8 alite_bind_positional(sqlite3_stmt *stmt, object *params);
+extern int alite_bind_positional(sqlite3_stmt *stmt, object *params);
 
 /*
  * Bind named params (dict) to statement
  * Return SQLITE_OK on success, -1 on error.
  */
-extern i8 alite_bind_named(sqlite3_stmt *stmt, object *params);
+extern int alite_bind_named(sqlite3_stmt *stmt, object *params);
 
 #endif // ALITE_BIND_H

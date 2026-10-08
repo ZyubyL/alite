@@ -21,7 +21,7 @@
 
 
 /* Bind params to stmt */
-static inline i8 Cursor_bind_params(CursorObject *self, object *params)
+static inline int Cursor_bind_params(CursorObject *self, object *params)
 {
     if (not params or params == None) { return 0; }
 
@@ -37,9 +37,9 @@ static inline i8 Cursor_bind_params(CursorObject *self, object *params)
 }
 
 /* Prepare the statement. Release GIL while doing. */
-static inline i8 do_prepare(CursorObject *self, ConnectionObject *conn, const char *sql)
+static inline int do_prepare(CursorObject *self, ConnectionObject *conn, const char *sql)
 {
-    i8 rc;
+    int rc;
     Py_BEGIN_ALLOW_THREADS
     rc = sqlite3_prepare_v2(conn->db, sql, -1, &self->stmt, NULL);
     Py_END_ALLOW_THREADS
@@ -193,7 +193,7 @@ static object* Cursor_fetchall(CursorObject *self, object* Py_UNUSED(ignored))
 
     int ncols = sqlite3_column_count(self->stmt);
     while (1) {
-        i8 rc = stmt_step_gil(self->stmt);
+        int rc = stmt_step_gil(self->stmt);
 
         if (rc == SQLITE_DONE) {
             self->done = 1;

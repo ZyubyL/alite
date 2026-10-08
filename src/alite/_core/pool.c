@@ -119,10 +119,10 @@ static CursorObject* new_cursor()
  * Execute an SQL statement (no results). Release GIL when executing.
  * Return SQLITE_OK on success.
  */
-static i8 exec(sqlite3 *db, const char *sql)
+static int exec(sqlite3 *db, const char *sql)
 {
     char *errmsg = NULL;
-    i8 rc;
+    int rc;
     Py_BEGIN_ALLOW_THREADS
     rc = sqlite3_exec(db, sql, NULL, NULL, &errmsg);
     Py_END_ALLOW_THREADS
@@ -134,9 +134,9 @@ static i8 exec(sqlite3 *db, const char *sql)
  * Prepare an SQL statement. Release GIL when doing.
  * Return SQLITE_OK on success.
  */
-static i8 prepare(sqlite3* db, const char *sql, sqlite3_stmt **out)
+static int prepare(sqlite3* db, const char *sql, sqlite3_stmt **out)
 {
-    i8 rc;
+    int rc;
     Py_BEGIN_ALLOW_THREADS
     rc = sqlite3_prepare_v2(db, sql, -1, out, NULL);
     Py_END_ALLOW_THREADS
@@ -146,7 +146,7 @@ static i8 prepare(sqlite3* db, const char *sql, sqlite3_stmt **out)
 /*
  * Rollback transaction on error, finalize statement, release resources, set the error and return NULL;
  */
-static void rollback(PoolObject *self, ConnectionObject *conn, CursorObject *cur, object *seq, i8 managed, const char *msg)
+static void rollback(PoolObject *self, ConnectionObject *conn, CursorObject *cur, object *seq, int managed, const char *msg)
 {
     if (managed) { exec(conn->db, "ROLLBACK"); }
 
@@ -176,7 +176,7 @@ static isize executemany_loop(sqlite3 *db, sqlite3_stmt *stmt, object *seq, isiz
             }
         }
 
-        i8 rc = stmt_step_gil(stmt);
+        int rc = stmt_step_gil(stmt);
         if (rc != SQLITE_DONE) {
             PyErr_Format(RuntimeError, "Step failed: %s", sqlite3_errmsg(db));
             goto failure;
@@ -194,9 +194,9 @@ failure:
  * BEGIN IMMEDIATE when auto commit is on.
  * Return 0 on OK, -1 with error when fail.
  */
-static i8 begin_managed_txn(ConnectionObject *conn, i8 *out_managed)
+static i8 begin_managed_txn(ConnectionObject *conn, int *out_managed)
 {
-    i8 managed = sqlite3_get_autocommit(conn->db);
+    int managed = sqlite3_get_autocommit(conn->db);
     *out_managed = managed;
     if (managed and exec(conn->db, "BEGIN IMMEDIATE") != SQLITE_OK) {
         PyErr_Format(RuntimeError, "BEGIN failed: %s", sqlite3_errmsg(conn->db));
@@ -209,7 +209,7 @@ static i8 begin_managed_txn(ConnectionObject *conn, i8 *out_managed)
  * Commit when managed.
  * Return 0 on OK, -1 with error when fail.
  */
-static i8 commit_managed_txn(ConnectionObject *conn, i8 managed)
+static i8 commit_managed_txn(ConnectionObject *conn, int managed)
 {
     if (managed and exec(conn->db, "COMMIT") != SQLITE_OK) {
         PyErr_Format(RuntimeError, "COMMIT failed: %s", sqlite3_errmsg(conn->db));
@@ -218,7 +218,7 @@ static i8 commit_managed_txn(ConnectionObject *conn, i8 managed)
     return 0;
 }
 
-static i8 prepare_or_rollback(PoolObject *pool, ConnectionObject *conn, CursorObject *cur, object *seq, const char *sql, i8 managed)
+static i8 prepare_or_rollback(PoolObject *pool, ConnectionObject *conn, CursorObject *cur, object *seq, const char *sql, int managed)
 {
     if (prepare(conn->db, sql, &cur->stmt) != SQLITE_OK) {
         rollback(pool, conn, cur, seq, managed, "Prepare failed");
@@ -288,7 +288,7 @@ static object* Pool_executemany(PoolObject *self, object *args, object *kwargs)
         return (object *)cur;
     }
 
-    i8 managed_txn = 0;
+    int managed_txn = 0;
     if (begin_managed_txn(conn, &managed_txn) != 0) {
         Py_DECREF(seq);
         Py_DECREF(cur);
@@ -347,7 +347,7 @@ static int Pool_init(PoolObject *self, object *args, object *kwargs)
 
     self->pool_size = pool_size;
     self->opened_conns = 0;
-    self->connections = calloc(pool_size, sizeof(ConnectionObject*));
+    self->connections = (ConnectionObject **)calloc(pool_size, sizeof(ConnectionObject*));
     if (not self->connections) {
         PyErr_NoMemory();
         goto cleanup;
@@ -363,7 +363,9 @@ static int Pool_init(PoolObject *self, object *args, object *kwargs)
     return 0;
 
 cleanup:
-    free(self->connections);
+    for (usize i = 0; i < self->opened_conns; i++) {
+        Connection_free(self->connections[i]);
+    }
     MAKE_NULL(self->connections);
     free(self->path);
     MAKE_NULL(self->path);
@@ -383,8 +385,8 @@ static void Pool_dealloc(PoolObject *self)
         for (usize i = 0; i < self->opened_conns; i++) {
             Connection_close_db(self->connections[i]);
             Py_DECREF(self->connections[i]);
+            Connection_free(self->connections[i]);
         }
-        free(self->connections);
     }
     if (self->path) { free(self->path); }
     if (self->lock_init and self->lock) { PyThread_free_lock(self->lock); }

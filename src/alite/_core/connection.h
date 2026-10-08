@@ -41,4 +41,9 @@ extern i8 Connection_open_db(ConnectionObject *self, const char *path);
  */
 extern i8 Connection_close_db(ConnectionObject *self);
 
+/*
+ * Close this connection and free the memory.
+ */
+extern void Connection_free(ConnectionObject *self);
+
 #endif // ALITE_CONNECTION_H

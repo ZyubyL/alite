@@ -15,11 +15,18 @@
 #include "connection.h"
 #include "alite.h"
 
+void Connection_free(ConnectionObject *self) {
+    if (self->in_use) {
+        self->in_use = 0;
+        free(self);
+    }
+}
+
 /* Close the database. */
 static i8 do_close(ConnectionObject *self)
 {
     if (not self->db) { return SQLITE_OK; }
-    i8 rc = sqlite3_close_v2(self->db);
+    i8 rc = (i8)sqlite3_close_v2(self->db);
     if (rc == SQLITE_OK) { MAKE_NULL(self->db); }
     return rc;
 }
@@ -29,7 +36,7 @@ static inline i8 open_db(ConnectionObject *self, const char *path)
 {
     i8 rc;
     Py_BEGIN_ALLOW_THREADS
-    rc = sqlite3_open(path, &self->db);
+    rc = (i8)sqlite3_open(path, &self->db);
     Py_END_ALLOW_THREADS
     return rc;
 }
@@ -39,9 +46,9 @@ static inline i8 enable_wal(ConnectionObject *self)
 {
     i8 rc;
     Py_BEGIN_ALLOW_THREADS
-    rc = sqlite3_exec(self->db, "PRAGMA journal_mode=WAL", NULL, NULL, NULL);
+    rc = (i8)sqlite3_exec(self->db, "PRAGMA journal_mode=WAL", NULL, NULL, NULL);
     if (rc == SQLITE_OK) {
-        rc = sqlite3_exec(self->db, "PRAGMA busy_timeout=" ALITE_DEFAULT_BUSY_TIMEOUT, NULL, NULL, NULL);
+        rc = (i8)sqlite3_exec(self->db, "PRAGMA busy_timeout=" ALITE_DEFAULT_BUSY_TIMEOUT, NULL, NULL, NULL);
     }
     Py_END_ALLOW_THREADS
     return rc;

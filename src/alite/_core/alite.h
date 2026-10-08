@@ -65,7 +65,7 @@ static inline const char* errmsg_from_stmt(sqlite3_stmt *stmt)
 /* Require self in the scope */
 #define FREE_OBJ Py_TYPE(self)->tp_free((object *)self)
 
-static inline i8 stmt_step_gil(sqlite3_stmt *stmt)
+static inline int stmt_step_gil(sqlite3_stmt *stmt)
 {
     int rc;
     Py_BEGIN_ALLOW_THREADS
