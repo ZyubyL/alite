@@ -30,25 +30,54 @@ object* Row_from_tuple(object *values, object *names, object *index)
     return (object *)self;
 }
 
+static i8 validate_key_type(object *key)
+{
+    if (PyUnicode_Check(key) || PyLong_Check(key)) { return 0; }
+    PyErr_SetString(TypeError, "Row indices must be int or str");
+    return -1;
+}
+
+static object* lookup_str_index(RowObject *self, object *key)
+{
+    object *idx = PyDict_GetItemWithError(self->index, key);
+    if (not idx) {
+        if (not PyErr_Occurred()) {
+            PyErr_SetString(IndexError, "No item with that key");
+        }
+        return NULL;
+    }
+    return idx;
+}
+
+static i8 convert_index_to_size_t(object *idx, isize *result)
+{
+    const isize i = PyLong_AsSsize_t(idx);
+    if (i == -1 and PyErr_Occurred()) { return -1; }
+    *result = i;
+    return 0;
+}
+
+static object* get_row_val(RowObject *self, isize index)
+{
+    return PySequence_GetItem(self->values, index);
+}
+
 /* row[0], row["name"] */
 static object* Row_subscript(RowObject *self, object *key)
 {
+    if (validate_key_type(key) != 0) { return NULL; }
+
     object *idx = key;
+
     if (PyUnicode_Check(key)) {
-        idx = PyDict_GetItemWithError(self->index, key);
-        if (not idx) {
-            if (not PyErr_Occurred()) {
-                PyErr_SetString(IndexError, "No item with that key");
-            }
-            return NULL;
-        }
-    } else if (not PyLong_Check(key)) {
-        PyErr_SetString(TypeError, "Row indices must be int or str");
-        return NULL;
+        idx = lookup_str_index(self, key);
+        if (not idx) { return NULL; }
     }
-    const isize i = PyLong_AsSsize_t(idx);
-    if (i == -1 and PyErr_Occurred()) { return NULL; }
-    return PySequence_GetItem(self->values, i);
+
+    isize index;
+    if (convert_index_to_size_t(idx, &index) != 0) { return NULL; }
+
+    return get_row_val(self, index);
 }
 
 static object* Row_item(RowObject *self, isize i)
