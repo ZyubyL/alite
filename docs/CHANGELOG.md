@@ -2,9 +2,16 @@
 
 Alite uses [Semantic versioning](https://semver.org)
 
-## 0.3.0.alpha0 - [Unreleased]
+## 0.5.0.alpha0 - [Unreleased]
 
 ### Alite has been rewritten in Rust
+
+### Added:
+
+- `Cursor.fetchone()`
+- `Cursor.fetchval()`
+
+## 0.3.0.alpha0 - 2026/10/8
 
 ### Added:
 

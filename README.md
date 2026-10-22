@@ -15,10 +15,10 @@
 
 - [x] execute
 - [x] executemany
-- [ ] fetchone
-- [ ] fetchval
-- [ ] fetchall
-- [ ] row with index and key access
+- [x] fetchone
+- [x] fetchval
+- [x] fetchall
+- [x] row with index and key access
 
 ## Installation
 
