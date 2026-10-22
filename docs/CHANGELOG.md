@@ -8,6 +8,7 @@ Alite uses [Semantic versioning](https://semver.org)
 
 ### Added:
 
+- Python 3.15 support
 - `Cursor.fetchone()`
 - `Cursor.fetchval()`
 
