@@ -1,12 +1,12 @@
-.PHONY: all fmt dev build test clean
+.PHONY: all lint dev build test clean
 
 all: build
 
-fmt:
+lint:
 	cargo fmt
 	cargo clippy
 
-dev: fmt
+dev:
 	uv sync --group dev
 
 build: dev
