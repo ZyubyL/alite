@@ -12,13 +12,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 **/
+use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 use rusqlite::types::Value as SqlValue;
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use crate::connection::Connection;
 use crate::row::Row;
 use crate::value::sql_to_py;
 
@@ -29,53 +29,52 @@ pub enum ParamKind {
 
 #[pyclass(name = "Cursor")]
 pub struct Cursor {
-    pub stmt: Mutex<Option<rusqlite::Statement<'static>>>,
-    pub conn: Connection,
-    pub col_names: Mutex<Vec<String>>,
-    pub col_index: Mutex<HashMap<String, usize>>,
-    pub closed: Mutex<bool>,
+    pub rows: Vec<Vec<SqlValue>>,
+    pub col_names: Vec<String>,
+    pub col_index: HashMap<String, usize>,
+    pub pos: Mutex<usize>,
     pub done: Mutex<bool>,
+    pub closed: Mutex<bool>,
     pub rowcount: i64,
 }
 
-// SAFETY: all access to the inner statement is serialized through `stmt: Mutex<...>`,
-// SAFETY: and the owning Connection is kept alive by `conn`, so cross thread use is sound.
-unsafe impl Send for Cursor {}
-unsafe impl Sync for Cursor {}
-
 impl Cursor {
-    pub fn new(stmt: rusqlite::Statement<'static>, conn: Connection, rowcount: i64) -> Self {
+    pub fn new(rows: Vec<Vec<SqlValue>>, col_names: Vec<String>, rowcount: i64) -> Self {
+        let mut idx = HashMap::new();
+        for (i, n) in col_names.iter().enumerate() {
+            idx.entry(n.clone()).or_insert(i);
+        }
         Self {
-            stmt: Mutex::new(Some(stmt)),
-            conn,
-            col_names: Mutex::new(Vec::new()),
-            col_index: Mutex::new(HashMap::new()),
-            closed: Mutex::new(false),
+            rows,
+            col_names,
+            col_index: idx,
+            pos: Mutex::new(0),
             done: Mutex::new(false),
+            closed: Mutex::new(false),
             rowcount,
         }
     }
 
-    pub fn empty(conn: Connection) -> Self {
+    pub fn empty() -> Self {
         Self {
-            stmt: Mutex::new(None),
-            conn,
-            col_names: Mutex::new(Vec::new()),
-            col_index: Mutex::new(HashMap::new()),
-            closed: Mutex::new(false),
+            rows: Vec::new(),
+            col_names: Vec::new(),
+            col_index: HashMap::new(),
+            pos: Mutex::new(0),
             done: Mutex::new(true),
+            closed: Mutex::new(false),
             rowcount: 0,
         }
     }
 
-    pub fn with_rowcount(conn: Connection, rowcount: i64) -> Self {
+    pub fn with_rowcount(rowcount: i64) -> Self {
         Self {
-            stmt: Mutex::new(None),
-            conn,
-            col_names: Mutex::new(Vec::new()),
-            col_index: Mutex::new(HashMap::new()),
-            closed: Mutex::new(false),
+            rows: Vec::new(),
+            col_names: Vec::new(),
+            col_index: HashMap::new(),
+            pos: Mutex::new(0),
             done: Mutex::new(true),
+            closed: Mutex::new(false),
             rowcount,
         }
     }
@@ -89,58 +88,19 @@ impl Cursor {
     }
 
     fn fetchall(&self, py: Python<'_>) -> PyResult<Py<PyList>> {
-        if *self.closed.lock().unwrap() {
-            return Err(pyo3::exceptions::PyRuntimeError::new_err(
-                "Cursor is closed during fetchall",
-            ));
+        if *self.closed.lock().unwrap_or_else(|e| e.into_inner()) {
+            return Err(PyRuntimeError::new_err("Cursor is closed during fetchall"));
         }
-        let mut stmt_guard = self.stmt.lock().unwrap();
-        let stmt = match stmt_guard.as_mut() {
-            None => {
-                drop(stmt_guard);
-                return Ok(PyList::empty(py).unbind());
-            }
-            Some(s) => s,
-        };
-        if *self.done.lock().unwrap() {
-            drop(stmt_guard);
+        if *self.done.lock().unwrap_or_else(|e| e.into_inner()) {
             return Ok(PyList::empty(py).unbind());
         }
 
-        if self.col_names.lock().unwrap().is_empty() {
-            let names: Vec<String> = stmt.column_names().iter().map(|s| s.to_string()).collect();
-            *self.col_names.lock().unwrap() = names.clone();
-            let mut idx = HashMap::new();
-            for (i, n) in names.iter().enumerate() {
-                idx.entry(n.clone()).or_insert(i);
-            }
-            *self.col_index.lock().unwrap() = idx;
-        }
-        let ncols = stmt.column_count();
-        let names = self.col_names.lock().unwrap().clone();
+        let start = *self.pos.lock().unwrap_or_else(|e| e.into_inner());
+        let names = self.col_names.clone();
+        let collected: Vec<Vec<SqlValue>> = self.rows[start..].to_vec();
 
-        drop(stmt_guard);
-
-        let collected: Vec<Vec<SqlValue>> = py.detach(|| {
-            let mut sg = self.stmt.lock().unwrap();
-            let stmt = sg.as_mut().unwrap();
-            let mut rows_iter = stmt.raw_query();
-            let mut out = Vec::new();
-            while let Some(row) = rows_iter
-                .next()
-                .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?
-            {
-                let mut vals = Vec::with_capacity(ncols);
-                for i in 0..ncols {
-                    let v: SqlValue = row.get(i).unwrap_or(SqlValue::Null);
-                    vals.push(v);
-                }
-                out.push(vals);
-            }
-            Ok::<Vec<Vec<SqlValue>>, PyErr>(out)
-        })?;
-
-        *self.done.lock().unwrap() = true;
+        *self.pos.lock().unwrap_or_else(|e| e.into_inner()) = self.rows.len();
+        *self.done.lock().unwrap_or_else(|e| e.into_inner()) = true;
 
         let list = PyList::empty(py);
         for row_vals in collected {
@@ -161,16 +121,100 @@ impl Cursor {
                 }
             }
             let row = Row::new(py, tuple.unbind(), names_tuple.unbind(), index.unbind())?;
+
             list.append(row)?;
         }
+
         Ok(list.unbind())
     }
 
-    fn close(&self) {
-        let mut guard = self.stmt.lock().unwrap();
-        if let Some(stmt) = guard.take() {
-            let _ = stmt.finalize();
+    fn fetchone(&self, py: Python<'_>) -> PyResult<Option<Row>> {
+        if *self.closed.lock().unwrap_or_else(|e| e.into_inner()) {
+            return Err(PyRuntimeError::new_err("Cursor is closed during fetchone"));
         }
-        *self.closed.lock().unwrap() = true;
+        if *self.done.lock().unwrap_or_else(|e| e.into_inner()) {
+            return Ok(None);
+        }
+
+        let mut pos = self.pos.lock().unwrap_or_else(|e| e.into_inner());
+        if *pos >= self.rows.len() {
+            *self.done.lock().unwrap_or_else(|e| e.into_inner()) = true;
+            return Ok(None);
+        }
+
+        let row_vals = self.rows[*pos].clone();
+        *pos += 1;
+
+        let finished = *pos >= self.rows.len();
+
+        drop(pos);
+
+        if finished {
+            *self.done.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        }
+
+        let names = self.col_names.clone();
+        let py_vals: Vec<Py<PyAny>> = row_vals.iter().map(|v| sql_to_py(py, v).unwrap()).collect();
+        let tuple = PyTuple::new(py, py_vals)?;
+        let names_tuple = PyTuple::new(
+            py,
+            names
+                .iter()
+                .map(|n| n.clone().into_pyobject(py).unwrap().into_any().unbind())
+                .collect::<Vec<_>>(),
+        )?;
+        let index = PyDict::new(py);
+        for (i, n) in names.iter().enumerate() {
+            if !index.contains(n)? {
+                index.set_item(n, i)?;
+            }
+        }
+
+        Ok(Some(Row::new(
+            py,
+            tuple.unbind(),
+            names_tuple.unbind(),
+            index.unbind(),
+        )?))
+    }
+
+    fn fetchval(&self, py: Python<'_>) -> PyResult<Option<Py<PyAny>>> {
+        if *self.closed.lock().unwrap_or_else(|e| e.into_inner()) {
+            return Err(PyRuntimeError::new_err("Cursor is closed during fetchval"));
+        }
+        if *self.done.lock().unwrap_or_else(|e| e.into_inner()) {
+            return Ok(None);
+        }
+
+        let mut pos = self.pos.lock().unwrap_or_else(|e| e.into_inner());
+        if *pos >= self.rows.len() {
+            *self.done.lock().unwrap_or_else(|e| e.into_inner()) = true;
+            return Ok(None);
+        }
+
+        let value = if self.rows[*pos].is_empty() {
+            None
+        } else {
+            Some(self.rows[*pos][0].clone())
+        };
+
+        *pos += 1;
+
+        let finished = *pos >= self.rows.len();
+
+        drop(pos);
+
+        if finished {
+            *self.done.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        }
+
+        match value {
+            Some(v) => Ok(Some(sql_to_py(py, &v)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn close(&self) {
+        *self.closed.lock().unwrap_or_else(|e| e.into_inner()) = true;
     }
 }

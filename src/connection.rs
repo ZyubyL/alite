@@ -12,6 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 **/
+use pyo3::exceptions::{PyConnectionError, PyRuntimeError};
 use pyo3::prelude::*;
 use rusqlite::Connection as SqliteConn;
 use std::sync::{Arc, Mutex};
@@ -25,10 +26,11 @@ pub struct Connection {
 
 impl Connection {
     pub fn open_db(path: &str) -> PyResult<Self> {
-        let conn = SqliteConn::open(path)
-            .map_err(|e| pyo3::exceptions::PyConnectionError::new_err(e.to_string()))?;
+        let conn = SqliteConn::open(path).map_err(|e| PyConnectionError::new_err(e.to_string()))?;
+
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA busy_timeout = 5000;")
-            .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+
         Ok(Self {
             db: Arc::new(Mutex::new(Some(conn))),
             in_use: Arc::new(Mutex::new(false)),
@@ -47,17 +49,18 @@ impl Connection {
     }
 
     pub fn close(&self) {
-        let mut guard = self.db.lock().unwrap();
+        let mut guard = self.db.lock().unwrap_or_else(|e| e.into_inner());
+
         if let Some(c) = guard.take() {
             let _ = c.close();
         }
-        *self.in_use.lock().unwrap() = false;
+
+        *self.in_use.lock().unwrap_or_else(|e| e.into_inner()) = false;
     }
 }
 
 impl Drop for Connection {
     fn drop(&mut self) {
-        // Connection is a shared handle (Arc). Do not close the DB here;
-        // closing is managed by Pool (see Drop for Pool).
+        // Connection is a shared handle (Arc). CLosing is managed py Pool.
     }
 }

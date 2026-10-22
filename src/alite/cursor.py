@@ -50,6 +50,18 @@ class AsyncCursor:
         """
         return await _run_in_thread(self._executor, self._cursor.fetchall)
 
+    async def fetchone(self) -> Row | None:
+        """
+        Fetch one row.
+        """
+        return await _run_in_thread(self._executor, self._cursor.fetchone)
+
+    async def fetchval(self) -> Row | None:
+        """
+        Fetch the first value in the row.
+        """
+        return await _run_in_thread(self._executor, self._cursor.fetchval)
+
     async def close(self) -> None:
         """
         Close the cursor and release resources.

@@ -13,7 +13,8 @@
  * limitations under the License.
 **/
 use pyo3::prelude::*;
-use pyo3::types::{PyBool, PyDict, PyList, PyTuple};
+use pyo3::exceptions::{PyIndexError, PyTypeError};
+use pyo3::types::{PyBool, PyDict, PyIterator, PyList, PyTuple};
 
 #[pyclass(name = "Row")]
 pub struct Row {
@@ -44,6 +45,7 @@ impl Row {
             if i < 0 {
                 let n = self.values.bind(py).len() as isize;
                 let i = (i % n + n) % n;
+
                 i as usize
             } else {
                 i as usize
@@ -52,21 +54,23 @@ impl Row {
             let index = self.index.bind(py);
             let idx_obj = index
                 .get_item(&name)?
-                .ok_or_else(|| pyo3::exceptions::PyIndexError::new_err("No item with that key"))?;
+                .ok_or_else(|| PyIndexError::new_err("No item with that key"))?;
             idx_obj.extract::<usize>()?
         } else {
-            return Err(pyo3::exceptions::PyTypeError::new_err(
+            return Err(PyTypeError::new_err(
                 "Row indices must be int or str",
             ));
         };
 
         let values = self.values.bind(py);
         if idx >= values.len() {
-            return Err(pyo3::exceptions::PyIndexError::new_err(
+            return Err(PyIndexError::new_err(
                 "index out of range",
             ));
         }
+
         let v = values.get_item(idx)?;
+
         Ok(v.unbind())
     }
 
@@ -74,8 +78,9 @@ impl Row {
         self.values.bind(py).len()
     }
 
-    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<PyTuple>> {
-        Ok(self.values.clone_ref(py))
+    fn __iter__(&self, py: Python<'_>) -> PyResult<Py<PyIterator>> {
+        let obj = self.values.bind(py).clone().into_any();
+        Ok(PyIterator::from_object(&obj)?.unbind())
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -85,6 +90,7 @@ impl Row {
     fn keys(&self, py: Python<'_>) -> PyResult<Py<PyList>> {
         let names = self.names.bind(py);
         let list = PyList::new(py, names.iter())?;
+
         Ok(list.unbind())
     }
 
@@ -99,6 +105,7 @@ impl Row {
         };
         let res = self.values.bind(py).eq(&other_values)?;
         let b = PyBool::new(py, res);
+
         Ok((*b).clone().into_any().unbind())
     }
 
@@ -113,6 +120,7 @@ impl Row {
         };
         let res = self.values.bind(py).ne(&other_values)?;
         let b = PyBool::new(py, res);
+
         Ok((*b).clone().into_any().unbind())
     }
 }

@@ -12,6 +12,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 **/
+use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyString};
 use rusqlite::types::Value as SqlValue;
@@ -20,21 +21,28 @@ pub fn py_to_sql(_py: Python<'_>, obj: &Bound<'_, PyAny>) -> PyResult<SqlValue> 
     if obj.is_none() {
         return Ok(SqlValue::Null);
     }
+
+    if let Ok(v) = obj.extract::<bool>() {
+        return Ok(SqlValue::Integer(v as i64));
+    }
+
     if let Ok(v) = obj.extract::<i64>() {
         return Ok(SqlValue::Integer(v));
     }
+
     if let Ok(v) = obj.extract::<f64>() {
         return Ok(SqlValue::Real(v));
     }
+
     if let Ok(s) = obj.cast::<PyString>() {
         return Ok(SqlValue::Text(s.to_str()?.to_owned()));
     }
+
     if let Ok(b) = obj.cast::<PyBytes>() {
         return Ok(SqlValue::Blob(b.as_bytes().to_vec()));
     }
-    Err(pyo3::exceptions::PyTypeError::new_err(
-        "Unsupported parameter type",
-    ))
+
+    Err(PyTypeError::new_err("Unsupported parameter type"))
 }
 
 pub fn sql_to_py(py: Python<'_>, v: &SqlValue) -> PyResult<Py<PyAny>> {
@@ -57,13 +65,17 @@ pub fn positional_params(
     let Some(p) = params else {
         return Ok(None);
     };
+
     if p.is_none() {
         return Ok(None);
     }
+
     let mut out = Vec::new();
+
     for item in p.try_iter()? {
         out.push(py_to_sql(py, &item?)?);
     }
+
     Ok(Some(out))
 }
 
@@ -73,9 +85,11 @@ pub fn named_params(
 ) -> PyResult<Vec<(String, SqlValue)>> {
     let dict = params.cast::<PyDict>()?;
     let mut out = Vec::with_capacity(dict.len());
+
     for (k, v) in dict.iter() {
         let key = k.extract::<String>()?;
         out.push((key, py_to_sql(py, &v)?));
     }
+
     Ok(out)
 }
