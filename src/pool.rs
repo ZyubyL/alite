@@ -89,9 +89,15 @@ impl Pool {
             }
             Some(ParamKind::Named(vals)) => {
                 for (name, v) in vals {
-                    let idx = stmt
-                        .parameter_index(name)
-                        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?
+                    let candidates = [
+                        name.clone(),
+                        format!(":{}", name),
+                        format!("@{}", name),
+                        format!("${}", name),
+                    ];
+                    let idx = candidates
+                        .iter()
+                        .find_map(|c| stmt.parameter_index(c).ok().flatten())
                         .ok_or_else(|| {
                             PyValueError::new_err(format!("Unknown parameter: {}", name))
                         })?;

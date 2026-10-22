@@ -14,9 +14,9 @@
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Self
+from typing import Any, Self, overload
 
 from alite._alite import DEFAULT_POOL_SIZE, MAX_POOL_SIZE
 from alite._alite import Pool as _Pool
@@ -77,9 +77,13 @@ class AsyncPool:
         """
         return self._pool.pool_size
 
-    async def execute(
-        self, sql: str, params: tuple[Any, ...] | None = None
-    ) -> AsyncCursor:
+    @overload
+    async def execute(self, sql: str, params: None = None) -> AsyncCursor: ...
+    @overload
+    async def execute(self, sql: str, params: Mapping[str, Any]) -> AsyncCursor: ...
+    @overload
+    async def execute(self, sql: str, params: Sequence[Any]) -> AsyncCursor: ...
+    async def execute(self, sql: str, params: Any | None = None) -> AsyncCursor:
         """
         Execute SQL and return an AsyncCursor for fetching results.
         """
@@ -89,8 +93,16 @@ class AsyncPool:
         )
         return AsyncCursor(cursor, self._executor)
 
+    @overload
     async def executemany(
-        self, sql: str, params_list: Sequence[tuple[Any, ...]]
+        self, sql: str, params_list: Sequence[Mapping[str, Any]]
+    ) -> AsyncCursor: ...
+    @overload
+    async def executemany(
+        self, sql: str, params_list: Sequence[Sequence[Any]]
+    ) -> AsyncCursor: ...
+    async def executemany(
+        self, sql: str, params_list: Sequence[Any]
     ) -> AsyncCursor:
         """
         Execute SQL for each set of parameters in a single transaction.

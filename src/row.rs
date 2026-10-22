@@ -12,8 +12,8 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 **/
-use pyo3::prelude::*;
 use pyo3::exceptions::{PyIndexError, PyTypeError};
+use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyIterator, PyList, PyTuple};
 
 #[pyclass(name = "Row")]
@@ -57,16 +57,12 @@ impl Row {
                 .ok_or_else(|| PyIndexError::new_err("No item with that key"))?;
             idx_obj.extract::<usize>()?
         } else {
-            return Err(PyTypeError::new_err(
-                "Row indices must be int or str",
-            ));
+            return Err(PyTypeError::new_err("Row indices must be int or str"));
         };
 
         let values = self.values.bind(py);
         if idx >= values.len() {
-            return Err(PyIndexError::new_err(
-                "index out of range",
-            ));
+            return Err(PyIndexError::new_err("index out of range"));
         }
 
         let v = values.get_item(idx)?;
