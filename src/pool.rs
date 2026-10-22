@@ -222,12 +222,13 @@ impl Pool {
 impl Pool {
     #[new]
     #[pyo3(signature = (path, pool_size = 4))]
-    fn new(path: String, pool_size: usize) -> PyResult<Self> {
+    fn new(path: String, pool_size: i64) -> PyResult<Self> {
         if !(1..=256).contains(&pool_size) {
             return Err(pyo3::exceptions::PyValueError::new_err(
                 "pool_size must be between 1 and 256",
             ));
         }
+        let pool_size = pool_size as usize;
         Ok(Self {
             inner: Arc::new(Mutex::new(PoolInner {
                 path,
@@ -289,5 +290,16 @@ impl Pool {
             }
         }
         py.detach(|| self.executemany_blocking(sql, rows))
+    }
+}
+
+impl Drop for Pool {
+    fn drop(&mut self) {
+        if let Ok(mut inner) = self.inner.lock() {
+            inner.closed = true;
+            for c in &inner.connections {
+                c.close();
+            }
+        }
     }
 }

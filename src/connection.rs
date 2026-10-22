@@ -57,7 +57,7 @@ impl Connection {
 
 impl Drop for Connection {
     fn drop(&mut self) {
-        let mut guard = self.db.lock().unwrap();
-        let _ = guard.take();
+        // Connection is a shared handle (Arc). Do not close the DB here;
+        // closing is managed by Pool (see Drop for Pool).
     }
 }
