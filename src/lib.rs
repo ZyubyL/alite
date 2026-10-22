@@ -12,25 +12,24 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
 **/
-#ifndef ALITE_ROW_H
-#define ALITE_ROW_H
+#![deny(unsafe_code)]
+mod connection;
+mod cursor;
+mod pool;
+mod row;
+mod value;
 
-#include "alite.h"
+use pyo3::prelude::*;
 
-typedef struct {
-    PyObject_HEAD
-    object *values;
-    object *names;
-    object *index;
-} RowObject;
+#[pymodule]
+fn _alite(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<pool::Pool>()?;
+    m.add_class::<connection::Connection>()?;
+    m.add_class::<cursor::Cursor>()?;
+    m.add_class::<row::Row>()?;
 
-extern type       *RowType;
-extern PyType_Spec Row_spec;
+    m.add("DEFAULT_POOL_SIZE", 4i64)?;
+    m.add("MAX_POOL_SIZE", 256i64)?;
 
-/*
- * Build a Row. Steal all references.
- * Return NULL on failure with exception set.
- */
-extern object* Row_from_tuple(object *values, object *names, object *index);
-
-#endif // ALITE_ROW_H
+    Ok(())
+}
