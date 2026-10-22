@@ -1,0 +1,12 @@
+[package]
+name = "alite"
+version = "0.3.0"
+edition = "2024"
+
+[lib]
+name = "_alite"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.30.1", features = ["extension-module"] }
+rusqlite = "0.40.2"

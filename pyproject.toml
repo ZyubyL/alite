@@ -24,14 +24,18 @@ Homepage = "https://github.com/zyubyl/alite"
 Issues = "https://github.com/zyubyl/alite/issues"
 
 [build-system]
-requires = ["setuptools>=84.0.0"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.15"]
+build-backend = "maturin"
+
+[tool.maturin]
+python-source = "src"
+module-name = "alite._alite"
 
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
     "pytest-asyncio>=1.4.0",
-    "setuptools>=84.0.0",
+    "maturin>=1.15",
 ]
 
 [tool.pytest.ini_options]

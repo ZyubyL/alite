@@ -1,0 +1,12 @@
+- [x] 1. Add Cargo.toml at repo root (crate _alite, cdylib; deps pyo3 0.24 extension-module, rusqlite 0.32).
+- [x] 2. Add src/lib.rs registering Pool, Connection, Cursor, Row + DEFAULT_POOL_SIZE/MAX_POOL_SIZE.
+- [x] 3. Add src/value.rs: SqlValue conversions + positional/named param parsing.
+- [x] 4. Add src/connection.rs: open (WAL + busy_timeout 5000), close, Drop.
+- [x] 5. Add src/pool.rs: lazy connection cache, lock, get/return, execute, executemany (transaction), close, pool_size getter.
+- [x] 6. Add src/cursor.rs: prepare, bind, step for rowcount, fetchall, close; transmuted statement lifetime.
+- [x] 7. Add src/row.rs: index/key access, len, iter, keys, eq/ne, repr, Rust-only constructor.
+- [x] 8. Update pyproject.toml: maturin build backend + [tool.maturin] (python-source=src, module-name=alite._alite); maturin in dev group.
+- [x] 9. Update Makefile: build → uv run maturin develop; clean adds cargo clean.
+- [x] 10. Update .github/workflows/test.yml: add Rust toolchain step.
+- [x] 11. Remove setup.py.
+- [ ] 12. Verify: make clean && make build && make test; smoke import + Row access.

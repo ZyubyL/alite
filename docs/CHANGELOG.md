@@ -4,6 +4,8 @@ Alite uses [Semantic versioning](https://semver.org)
 
 ## 0.3.0.alpha0 - [Unreleased]
 
+### Alite has been rewritten in Rust
+
 ### Added:
 
 - `Pool.pool_size` property.
